@@ -1,7 +1,9 @@
 #include "opendbc/safety/declarations.h"
 
 bool get_longitudinal_allowed(void) {
-  return controls_allowed && !gas_pressed_prev;
+  // brake is included so that holding the brake while moving stops longitudinal
+  // actuation without giving up controls_allowed (see the brake handling in safety.h)
+  return controls_allowed && !gas_pressed_prev && !brake_pressed_prev;
 }
 
 // Safety checks for longitudinal actuation

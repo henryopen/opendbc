@@ -356,8 +356,11 @@ static void relay_malfunction_set(void) {
 static void generic_rx_checks(void) {
   gas_pressed_prev = gas_pressed;
 
-  // exit controls on rising edge of brake press
-  if (brake_pressed && (!brake_pressed_prev || vehicle_moving)) {
+  // exit controls on brake press only when stopped or crawling. While the car is
+  // moving the brake is a temporary override: longitudinal actuation is blocked by
+  // get_longitudinal_allowed() below, but controls_allowed is kept so openpilot
+  // resumes on its own when the pedal is released.
+  if (brake_pressed && !vehicle_moving) {
     controls_allowed = false;
   }
   brake_pressed_prev = brake_pressed;
