@@ -270,6 +270,7 @@ extern bool cruise_engaged_prev;
 extern struct sample_t vehicle_speed;
 extern struct sample_t vehicle_speed_2;
 extern bool vehicle_moving;
+extern bool brake_release_resume;
 extern bool acc_main_on; // referred to as "ACC off" in ISO 15622:2018
 extern int cruise_button_prev;
 extern bool safety_rx_checks_invalid;

@@ -9,6 +9,8 @@ static const uint8_t HYUNDAI_PREV_BUTTON_SAMPLES = 8;  // roughly 160 ms
 
 extern const uint32_t HYUNDAI_STANDSTILL_THRSLD;
 const uint32_t HYUNDAI_STANDSTILL_THRSLD = 12;  // 0.375 kph
+// above this the brake is only an override, matching the 0.5 m/s used on the VW build
+const uint32_t HYUNDAI_BRAKE_OVERRIDE_THRSLD = 58;  // 1.8 kph (0.5 m/s)
 
 enum {
   HYUNDAI_BTN_NONE = 0,

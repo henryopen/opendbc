@@ -57,6 +57,10 @@ bool cruise_engaged_prev = false;
 struct sample_t vehicle_speed;
 struct sample_t vehicle_speed_2;
 bool vehicle_moving = false;
+// set by brand code when the car is fast enough that a brake press should only be a
+// temporary override instead of a disengagement. Left false elsewhere, so every other
+// brand keeps the stock behaviour.
+bool brake_release_resume = false;
 bool acc_main_on = false;  // referred to as "ACC off" in ISO 15622:2018
 int cruise_button_prev = 0;
 bool safety_rx_checks_invalid = false;
@@ -356,11 +360,11 @@ static void relay_malfunction_set(void) {
 static void generic_rx_checks(void) {
   gas_pressed_prev = gas_pressed;
 
-  // exit controls on brake press only when stopped or crawling. While the car is
-  // moving the brake is a temporary override: longitudinal actuation is blocked by
-  // get_longitudinal_allowed() below, but controls_allowed is kept so openpilot
+  // exit controls on rising edge of brake press. Above the brand's brake-override
+  // speed the pedal is treated as a temporary override instead: longitudinal actuation
+  // is blocked by get_longitudinal_allowed(), but controls_allowed is kept so openpilot
   // resumes on its own when the pedal is released.
-  if (brake_pressed && !vehicle_moving) {
+  if (brake_pressed && !brake_release_resume && (!brake_pressed_prev || vehicle_moving)) {
     controls_allowed = false;
   }
   brake_pressed_prev = brake_pressed;
@@ -447,6 +451,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
   steering_disengage_prev = false;
   cruise_engaged_prev = false;
   vehicle_moving = false;
+  brake_release_resume = false;
   acc_main_on = false;
   cruise_button_prev = 0;
   desired_torque_last = 0;
