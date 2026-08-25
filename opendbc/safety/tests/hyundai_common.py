@@ -127,18 +127,21 @@ class HyundaiLongitudinalBase(common.LongitudinalAccelSafetyTest):
           self._rx(self._button_msg(btn_prev))
           self.assertFalse(self.safety.get_controls_allowed())
 
-        # should enter controls allowed on falling edge and not transitioning to cancel
+        # should enter controls allowed on falling edge
         should_enable = btn_cur != btn_prev and \
-                        btn_cur != Buttons.CANCEL and \
                         btn_prev in (Buttons.RESUME, Buttons.SET)
 
         self._rx(self._button_msg(btn_cur))
         self.assertEqual(should_enable, self.safety.get_controls_allowed())
 
   def test_cancel_button(self):
+    """
+      The middle button is a pause/resume button on this platform, so it keeps the
+      authorisation: openpilot pauses longitudinal in software. MAIN is the off switch.
+    """
     self.safety.set_controls_allowed(1)
     self._rx(self._button_msg(Buttons.CANCEL))
-    self.assertFalse(self.safety.get_controls_allowed())
+    self.assertTrue(self.safety.get_controls_allowed())
 
   def test_main_cruise_button(self):
     """Test that main cruise button correctly toggles acc_main_on state"""

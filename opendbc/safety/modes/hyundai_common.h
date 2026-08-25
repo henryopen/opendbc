@@ -140,10 +140,11 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
       controls_allowed = true;
     }
 
-    // exit controls on cancel press
-    if (cruise_button == HYUNDAI_BTN_CANCEL) {
-      controls_allowed = false;
-    }
+    // The middle button is a pause/resume button on this platform, not a cancel one, so it must
+    // not drop the authorisation: openpilot pauses longitudinal in software (see
+    // sunnypilot/selfdrive/car/long_pause.py) and resumes on the next press. Dropping it here
+    // left openpilot enabled while the panda was not, which trips controlsMismatch.
+    // MAIN stays the off switch - acc_main_on going low exits both lateral and longitudinal.
 
     // toggle main cruise state on rising edge of main cruise button
     if (main_button && !main_button_prev && hyundai_longitudinal_main_cruise_toggleable) {
