@@ -127,7 +127,8 @@ class HyundaiLongitudinalBase(common.LongitudinalAccelSafetyTest):
           self._rx(self._button_msg(btn_prev))
           self.assertFalse(self.safety.get_controls_allowed())
 
-        # should enter controls allowed on falling edge and not transitioning to cancel
+        # should enter controls allowed on falling edge. The cancel button follows
+        # acc_main_on, which is off here, so it still clears the authorisation.
         should_enable = btn_cur != btn_prev and \
                         btn_cur != Buttons.CANCEL and \
                         btn_prev in (Buttons.RESUME, Buttons.SET)
@@ -136,9 +137,35 @@ class HyundaiLongitudinalBase(common.LongitudinalAccelSafetyTest):
         self.assertEqual(should_enable, self.safety.get_controls_allowed())
 
   def test_cancel_button(self):
+    """
+      The middle button is a pause/resume button on this platform, so it follows MAIN rather
+      than dropping the authorisation on its own: openpilot disengages on the press and
+      engages again on the next one. Turning MAIN off is what exits controls.
+    """
+    default_safety_mode = self.safety.get_current_safety_mode()
+    default_safety_param = self.safety.get_current_safety_param()
+    default_safety_param_sp = self.safety.get_current_safety_param_sp()
+    self.safety.set_current_safety_param_sp(default_safety_param_sp | HyundaiSafetyFlagsSP.LONG_MAIN_CRUISE_TOGGLEABLE)
+    self.safety.set_safety_hooks(default_safety_mode, default_safety_param)
+
+    # MAIN on: the press keeps the authorisation so the next press can re-engage
+    self._rx(self._main_cruise_button_msg(0))
+    self._rx(self._main_cruise_button_msg(1))
+    self.assertTrue(self.safety.get_acc_main_on())
+    self.safety.set_controls_allowed(1)
+    self._rx(self._button_msg(Buttons.CANCEL))
+    self.assertTrue(self.safety.get_controls_allowed())
+
+    # MAIN off: the press exits controls
+    self._rx(self._main_cruise_button_msg(0))
+    self._rx(self._main_cruise_button_msg(1))
+    self.assertFalse(self.safety.get_acc_main_on())
     self.safety.set_controls_allowed(1)
     self._rx(self._button_msg(Buttons.CANCEL))
     self.assertFalse(self.safety.get_controls_allowed())
+
+    self.safety.set_current_safety_param_sp(default_safety_param_sp)
+    self.safety.set_safety_hooks(default_safety_mode, default_safety_param)
 
   def test_main_cruise_button(self):
     """Test that main cruise button correctly toggles acc_main_on state"""

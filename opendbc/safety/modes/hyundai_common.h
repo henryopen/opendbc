@@ -140,9 +140,12 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
       controls_allowed = true;
     }
 
-    // exit controls on cancel press
+    // The middle button is a pause/resume button on this platform: openpilot disengages on
+    // the press and engages again on the next one, so the authorisation follows MAIN rather
+    // than being dropped outright - otherwise the re-engage press has no authorisation and
+    // trips controlsMismatch. MAIN off is still what exits controls.
     if (cruise_button == HYUNDAI_BTN_CANCEL) {
-      controls_allowed = false;
+      controls_allowed = acc_main_on;
     }
 
     // toggle main cruise state on rising edge of main cruise button
