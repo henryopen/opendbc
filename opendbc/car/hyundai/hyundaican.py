@@ -133,15 +133,16 @@ def create_lfahda_mfc(packer, enabled, lfa_icon):
 
 def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: CanLeadData,
                         hud_control, set_speed, stopping, long_override, use_fca, CP,
-                        main_cruise_enabled, tuning, ESCC: EnhancedSmartCruiseControl | None = None,
-                        long_paused: bool = False):
+                        main_cruise_enabled, tuning, ESCC: EnhancedSmartCruiseControl | None = None):
   commands = []
 
   def get_scc11_values():
     return {
       "MainMode_ACC": 1 if main_cruise_enabled else 0,
       "TauGapSet": hud_control.leadDistanceBars,
-      "VSetDis": set_speed if enabled else 0,
+      # the set speed stays on the cluster while MAIN is on, the way the factory ACC does:
+      # it survives a disengagement and RES brings it back
+      "VSetDis": set_speed if main_cruise_enabled else 0,
       "AliveCounterACC": idx % 0x10,
       "ObjValid": int(lead_data.lead_visible), # close lead makes controls tighter
       "ACC_ObjStatus": int(lead_data.lead_visible), # close lead makes controls tighter
@@ -152,10 +153,7 @@ def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: CanL
 
   def get_scc12_values():
     scc12_values = {
-      # A pause has to look like the ACC is not acting, not like an override: mode 2 still
-      # asks the car to hold the current speed, which fights the driver's brake. Mode 0 lets
-      # go entirely. VSetDis stays on the enabled flag so the cluster keeps the set speed.
-      "ACCMode": 0 if long_paused else (2 if enabled and long_override else 1 if enabled else 0),
+      "ACCMode": 2 if enabled and long_override else 1 if enabled else 0,
       "StopReq": 1 if tuning.stopping else 0,
       "aReqRaw": tuning.desired_accel,
       "aReqValue": tuning.actual_accel,  # stock ramps up and down respecting jerk limit until it reaches aReqRaw

@@ -176,16 +176,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       # TODO: unclear if this is needed
       jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
       use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
-      # A pause (brake pedal or the middle cruise button) means the driver asked us to stop
-      # acting, so the ACC has to look inactive - mode 2 still asks the car to hold the current
-      # speed, which fights the brake. The accelerator is different: that is a real override
-      # and the stock ACC stays in mode 2 for it.
-      long_paused = CC.enabled and not CC.longActive and not CS.out.gasPressed
       can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
                                                       self.lead_data, hud_control, set_speed_in_units, stopping,
                                                       CC.cruiseControl.override, use_fca, self.CP,
-                                                      CS.main_cruise_enabled, self.tuning, self.ESCC,
-                                                      long_paused))
+                                                      CS.main_cruise_enabled, self.tuning, self.ESCC))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
