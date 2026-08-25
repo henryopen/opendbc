@@ -187,6 +187,14 @@ static void hyundai_rx_hook(const CANPacket_t *msg) {
     } else {
     }
 
+    // A blip of the accelerator from a stop takes over, the way the stock ACC resumes from
+    // standstill: authorisation is given on the press so openpilot can engage itself, and
+    // get_longitudinal_allowed() keeps actuation blocked until the pedal comes back up.
+    // Only from a stop (below the brake-override speed) and only with MAIN on.
+    if (hyundai_longitudinal && acc_main_on && !brake_release_resume && gas_pressed && !gas_pressed_prev) {
+      controls_allowed = true;
+    }
+
     // sample wheel speed, averaging opposite corners
     if (msg->addr == 0x386U) {
       uint32_t front_left_speed = GET_BYTES(msg, 0, 2) & 0x3FFFU;
