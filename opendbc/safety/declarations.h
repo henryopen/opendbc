@@ -320,6 +320,11 @@ extern CurvatureSteeringState curvature_state;
 // This flag allows AEB to be commanded from openpilot.
 #define ALT_EXP_ALLOW_AEB 16
 
+// This flag lets lateral control stay on while openpilot is not engaged.
+// The car side still gates it: openpilot only asks for lateral when nothing
+// is blocking engagement (main off, door open, gear, calibration, pedals).
+#define ALT_EXP_ALWAYS_ON_LATERAL 32
+
 extern int alternative_experience;
 
 // time since safety mode has been changed
