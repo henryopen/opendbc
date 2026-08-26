@@ -117,10 +117,12 @@ class HyundaiLongitudinalBase(common.LongitudinalAccelSafetyTest):
           self._rx(self._button_msg(btn_prev))
           self.assertFalse(self.safety.get_controls_allowed())
 
-        # should enter controls allowed on falling edge and not transitioning to cancel
+        # should enter controls allowed on falling edge and not transitioning to cancel.
+        # the middle button is a pause/resume button on this car, so its falling edge
+        # also enables while controls are off
         should_enable = btn_cur != btn_prev and \
                         btn_cur != Buttons.CANCEL and \
-                        btn_prev in (Buttons.RESUME, Buttons.SET)
+                        btn_prev in (Buttons.RESUME, Buttons.SET, Buttons.CANCEL)
 
         self._rx(self._button_msg(btn_cur))
         self.assertEqual(should_enable, self.safety.get_controls_allowed())

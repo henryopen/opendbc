@@ -113,8 +113,9 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
       controls_allowed = true;
     }
 
-    // exit controls on cancel press, but only while it is acting as a pause
-    if ((cruise_button == HYUNDAI_BTN_CANCEL) && hyundai_cancel_pressed_while_allowed) {
+    // exit controls while cancel is held. releasing it is what hands authority back,
+    // and only when controls were already off when it went down
+    if (cruise_button == HYUNDAI_BTN_CANCEL) {
       controls_allowed = false;
     }
 
