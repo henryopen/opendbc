@@ -145,6 +145,10 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.KIA_OPTIMA_G4_FL:
       ret.steerActuatorDelay = 0.2
 
+    # lagd settles around 0.33 on this car, so start there instead of waiting for it to learn
+    if candidate == CAR.HYUNDAI_CUSTIN_1ST_GEN:
+      ret.steerActuatorDelay = 0.33
+
     # Dashcam cars are missing a test route, or otherwise need validation
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
     if candidate in (CAR.KIA_OPTIMA_H,):
