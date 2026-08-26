@@ -43,6 +43,7 @@ extern bool hyundai_alt_limits_2;
 bool hyundai_alt_limits_2 = false;
 
 static uint8_t hyundai_last_button_interaction;  // button messages since the user pressed an enable button
+static bool hyundai_cancel_pressed_while_allowed;  // controls state when the middle button went down
 
 void hyundai_common_init(uint16_t param) {
   const uint16_t HYUNDAI_PARAM_EV_GAS = 1;
@@ -62,6 +63,7 @@ void hyundai_common_init(uint16_t param) {
   hyundai_alt_limits_2 = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS_2);
 
   hyundai_last_button_interaction = HYUNDAI_PREV_BUTTON_SAMPLES;
+  hyundai_cancel_pressed_while_allowed = false;
 
 #ifdef ALLOW_DEBUG
   const uint16_t HYUNDAI_PARAM_LONGITUDINAL = 4;
@@ -99,12 +101,20 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
     // enter controls on falling edge of resume or set
     bool set = (cruise_button != HYUNDAI_BTN_SET) && (cruise_button_prev == HYUNDAI_BTN_SET);
     bool res = (cruise_button != HYUNDAI_BTN_RESUME) && (cruise_button_prev == HYUNDAI_BTN_RESUME);
-    if (set || res) {
+
+    // the middle button is a pause/resume button on this car, so remember whether controls were
+    // already on when it went down - releasing it only engages when the press was a resume
+    if ((cruise_button == HYUNDAI_BTN_CANCEL) && (cruise_button_prev != HYUNDAI_BTN_CANCEL)) {
+      hyundai_cancel_pressed_while_allowed = controls_allowed;
+    }
+    bool cancel_release = (cruise_button != HYUNDAI_BTN_CANCEL) && (cruise_button_prev == HYUNDAI_BTN_CANCEL);
+
+    if (set || res || (cancel_release && !hyundai_cancel_pressed_while_allowed)) {
       controls_allowed = true;
     }
 
-    // exit controls on cancel press
-    if (cruise_button == HYUNDAI_BTN_CANCEL) {
+    // exit controls on cancel press, but only while it is acting as a pause
+    if ((cruise_button == HYUNDAI_BTN_CANCEL) && hyundai_cancel_pressed_while_allowed) {
       controls_allowed = false;
     }
 
