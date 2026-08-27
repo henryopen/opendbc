@@ -10,10 +10,18 @@ from opendbc.car.hyundai.values import DBC, HyundaiFlags
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
 
-# The Custin carries a 30 slot track list at 0x238 on bus 1 rather than the Mando 0x500 block.
+# The Custin carries its track list at 0x238 on bus 1 rather than in the Mando 0x500 block.
 # Fields were reverse engineered from this car's own logs, see opendbc/dbc/custin_radar.dbc.
+# The thirty addresses are ten targets of three messages each, not thirty tracks: over twenty
+# seconds of driving the valid-frame counts of 0x238 and 0x239 match exactly and the pattern
+# repeats every third address, while the two companions swing across the full field where a
+# real azimuth would sit. Reading all thirty invented two targets for every real one.
 CUSTIN_RADAR_START_ADDR = 0x238
-CUSTIN_RADAR_MSG_COUNT = 30
+CUSTIN_RADAR_STRIDE = 3
+CUSTIN_RADAR_TRACKS = 10
+CUSTIN_RADAR_ADDRS = tuple(range(CUSTIN_RADAR_START_ADDR,
+                                CUSTIN_RADAR_START_ADDR + CUSTIN_RADAR_STRIDE * CUSTIN_RADAR_TRACKS,
+                                CUSTIN_RADAR_STRIDE))
 CUSTIN_PRIMARY_ONLY = True  # see the comment in _update
 CUSTIN_MIN_RANGE = 2.0      # below this is bumper clutter, and an empty slot reads zero
 CUSTIN_MAX_ABS_Y = 5.5      # this lane and the two beside it; roadside structure sits outside
@@ -68,11 +76,11 @@ def get_radar_can_parser(CP):
     return None
 
   if CP.flags & HyundaiFlags.CUSTIN_RADAR:
-    start_addr, msg_count, freq = CUSTIN_RADAR_START_ADDR, CUSTIN_RADAR_MSG_COUNT, 33
+    addrs, freq = CUSTIN_RADAR_ADDRS, 33
   else:
-    start_addr, msg_count, freq = RADAR_START_ADDR, RADAR_MSG_COUNT, 50
+    addrs, freq = tuple(range(RADAR_START_ADDR, RADAR_START_ADDR + RADAR_MSG_COUNT)), 50
 
-  messages = [(f"RADAR_TRACK_{addr:x}", freq) for addr in range(start_addr, start_addr + msg_count)]
+  messages = [(f"RADAR_TRACK_{addr:x}", freq) for addr in addrs]
   return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
 
 
@@ -87,16 +95,14 @@ class RadarInterface(RadarInterfaceBase):
     super().__init__(CP)
     self.updated_messages = set()
     self.custin = bool(CP.flags & HyundaiFlags.CUSTIN_RADAR)
-    self.start_addr = CUSTIN_RADAR_START_ADDR if self.custin else RADAR_START_ADDR
-    self.msg_count = CUSTIN_RADAR_MSG_COUNT if self.custin else RADAR_MSG_COUNT
-    self.trigger_msg = self.start_addr + self.msg_count - 1
+    self.addrs = CUSTIN_RADAR_ADDRS if self.custin else tuple(range(RADAR_START_ADDR, RADAR_START_ADDR + RADAR_MSG_COUNT))
+    self.trigger_msg = self.addrs[-1]
 
     self.radar_off_can = CP.radarUnavailable
     self.rcp = get_radar_can_parser(CP)
     self.scp = get_speed_can_parser(CP) if self.custin and self.rcp is not None else None
     self.v_ego = 0.
-    self.slots = {addr: CustinSlot() for addr in
-                  range(CUSTIN_RADAR_START_ADDR, CUSTIN_RADAR_START_ADDR + CUSTIN_RADAR_MSG_COUNT)} if self.custin else {}
+    self.slots = {addr: CustinSlot() for addr in CUSTIN_RADAR_ADDRS} if self.custin else {}
     self.frame_time = 0.
     self.hits: dict[int, int] = dict.fromkeys(self.slots, 0)
 
@@ -138,7 +144,7 @@ class RadarInterface(RadarInterfaceBase):
     # lateral offset: radard reads that as a car keeping station ahead and picks it over
     # the real one, which measured worse than vision alone. Until the two can be told
     # apart, hand radard only the primary target.
-    addrs = (self.start_addr,) if (self.custin and CUSTIN_PRIMARY_ONLY) else             range(self.start_addr, self.start_addr + self.msg_count)
+    addrs = (self.addrs[0],) if (self.custin and CUSTIN_PRIMARY_ONLY) else self.addrs
     for addr in addrs:
       msg = self.rcp.vl[f"RADAR_TRACK_{addr:x}"]
 
@@ -151,13 +157,15 @@ class RadarInterface(RadarInterfaceBase):
         rng = msg['LONG_DIST']
         azimuth = math.radians(msg['AZIMUTH'])
         y_rel = -math.sin(azimuth) * rng
+        x_rel = math.cos(azimuth) * rng
         slot = self.slots[addr]
 
         # STATE does not tell targets from scenery here, and a guardrail read along its
         # length looks like a car at our own speed, so gate on range and lateral offset.
-        keep = rng > CUSTIN_MIN_RANGE and msg['SCORE'] >= CUSTIN_MIN_SCORE and                (CUSTIN_PRIMARY_ONLY or abs(y_rel) < CUSTIN_MAX_ABS_Y)
+        keep = (rng > CUSTIN_MIN_RANGE and msg['SCORE'] >= CUSTIN_MIN_SCORE
+                and (CUSTIN_PRIMARY_ONLY or abs(y_rel) < CUSTIN_MAX_ABS_Y))
         if keep:
-          slot.update(self.frame_time, math.cos(azimuth) * rng)
+          slot.update(self.frame_time, x_rel)
           self.hits[addr] = min(self.hits[addr] + 1, CUSTIN_MIN_HITS)
         else:
           slot.reset()
