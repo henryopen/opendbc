@@ -105,6 +105,7 @@ class RadarInterface(RadarInterfaceBase):
     self.slots = {addr: CustinSlot() for addr in CUSTIN_RADAR_ADDRS} if self.custin else {}
     self.frame_time = 0.
     self.hits: dict[int, int] = dict.fromkeys(self.slots, 0)
+    self.all_points: list = []      # every track, where ret.points is only what radard may follow
 
   def update(self, can_strings):
     if self.radar_off_can or (self.rcp is None):
@@ -138,14 +139,14 @@ class RadarInterface(RadarInterfaceBase):
     if not self.rcp.can_valid:
       ret.errors.canError = True
 
-    # 0x238 is the target the car's own ACC has locked onto, and it tracks the stock
-    # ACC's reported distance to 0.10 m. The other 29 slots are the raw track list, where
-    # a guardrail scanned along its length holds a steady range at a lane's worth of
-    # lateral offset: radard reads that as a car keeping station ahead and picks it over
-    # the real one, which measured worse than vision alone. Until the two can be told
-    # apart, hand radard only the primary target.
-    addrs = (self.addrs[0],) if (self.custin and CUSTIN_PRIMARY_ONLY) else self.addrs
-    for addr in addrs:
+    # 0x238 is the target the car's own ACC has locked onto, and it tracks the stock ACC's
+    # reported distance to 0.10 m. The rest of the list is raw, and a guardrail scanned
+    # along its length holds a steady range at a lane's worth of lateral offset: radard
+    # reads that as a car keeping station ahead and picks it over the real one, which
+    # measured worse than vision alone. So the whole list is decoded, kept in allPoints
+    # for the display and for watching the lanes beside us, while radard is handed the
+    # primary target alone.
+    for addr in self.addrs:
       msg = self.rcp.vl[f"RADAR_TRACK_{addr:x}"]
 
       if addr not in self.pts:
@@ -162,8 +163,9 @@ class RadarInterface(RadarInterfaceBase):
 
         # STATE does not tell targets from scenery here, and a guardrail read along its
         # length looks like a car at our own speed, so gate on range and lateral offset.
+        # the primary target is the car's own pick, so it is not second-guessed on offset
         keep = (rng > CUSTIN_MIN_RANGE and msg['SCORE'] >= CUSTIN_MIN_SCORE
-                and (CUSTIN_PRIMARY_ONLY or abs(y_rel) < CUSTIN_MAX_ABS_Y))
+                and (addr == self.addrs[0] or abs(y_rel) < CUSTIN_MAX_ABS_Y))
         if keep:
           slot.update(self.frame_time, x_rel)
           self.hits[addr] = min(self.hits[addr] + 1, CUSTIN_MIN_HITS)
@@ -187,5 +189,10 @@ class RadarInterface(RadarInterfaceBase):
       if not valid:
         del self.pts[addr]
 
-    ret.points = list(self.pts.values())
+    self.all_points = list(self.pts.values())
+    if self.custin and CUSTIN_PRIMARY_ONLY:
+      primary = self.pts.get(self.addrs[0])
+      ret.points = [primary] if primary is not None else []
+    else:
+      ret.points = self.all_points
     return ret
