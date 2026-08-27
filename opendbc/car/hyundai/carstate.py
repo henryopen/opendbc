@@ -29,6 +29,7 @@ class CarState(CarStateBase):
     self.cruise_buttons: deque = deque([Buttons.NONE] * PREV_BUTTON_SAMPLES, maxlen=PREV_BUTTON_SAMPLES)
     self.main_buttons: deque = deque([Buttons.NONE] * PREV_BUTTON_SAMPLES, maxlen=PREV_BUTTON_SAMPLES)
     self.lda_button = 0
+    self.main_cruise_enabled = False
 
     self.gear_msg_canfd = "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
@@ -190,6 +191,15 @@ class CarState(CarStateBase):
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
                         *create_button_events(self.lda_button, prev_lda_button, {1: ButtonType.lkas})]
+
+    if self.CP.openpilotLongitudinalControl:
+      # Main is the driver's switch, not the brakes'. TCS13.ACCEnable only says the brakes
+      # are not objecting, which they never are, so on its own main comes up on and stays
+      # on however often the button is pressed. Track what the driver asked for, and keep
+      # the car's veto over it.
+      if any(be.type == ButtonType.mainCruise and be.pressed for be in ret.buttonEvents):
+        self.main_cruise_enabled = not self.main_cruise_enabled
+      ret.cruiseState.available = ret.cruiseState.available and self.main_cruise_enabled
 
     ret.blockPcmEnable = not self.recent_button_interaction()
 
