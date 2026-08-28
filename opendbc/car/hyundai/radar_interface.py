@@ -15,7 +15,11 @@ RADAR_MSG_COUNT = 32
 # The thirty addresses are ten targets of three messages each, not thirty tracks: over twenty
 # seconds of driving the valid-frame counts of 0x238 and 0x239 match exactly and the pattern
 # repeats every third address, while the two companions swing across the full field where a
-# real azimuth would sit. Reading all thirty invented two targets for every real one.
+# real lateral offset would sit. Reading all thirty invented two targets for every real one.
+# LONG_DIST/LAT_DIST are a cartesian pair in metres. The lateral field was first read as an
+# azimuth in degrees, one bit too wide: its lowest bit reads 1 in 90% of frames where a real
+# data bit sits at 50%, and dropping it makes a stationary target's dy/dt match -yaw_rate*x
+# (fitted slope 2.05 -> 1.13, r=0.89 over 341 samples taken while turning).
 CUSTIN_RADAR_START_ADDR = 0x238
 CUSTIN_RADAR_STRIDE = 3
 CUSTIN_RADAR_TRACKS = 10
@@ -156,9 +160,8 @@ class RadarInterface(RadarInterfaceBase):
 
       if self.custin:
         rng = msg['LONG_DIST']
-        azimuth = math.radians(msg['AZIMUTH'])
-        y_rel = -math.sin(azimuth) * rng
-        x_rel = math.cos(azimuth) * rng
+        y_rel = -msg['LAT_DIST']
+        x_rel = rng
         slot = self.slots[addr]
 
         # STATE does not tell targets from scenery here, and a guardrail read along its
