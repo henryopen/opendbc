@@ -47,10 +47,14 @@ class CustinSlot:
   def reset(self):
     self.hist.clear()
 
-  def update(self, t, d_rel, v_abs):
-    if self.hist and (t - self.hist[-1][0] > CUSTIN_MAX_GAP or abs(d_rel - self.hist[-1][1]) > CUSTIN_MAX_JUMP):
+  def update(self, t, d_rel, v_abs) -> bool:
+    """-> True when a different object has taken the slot."""
+    swapped = bool(self.hist) and (t - self.hist[-1][0] > CUSTIN_MAX_GAP
+                                   or abs(d_rel - self.hist[-1][1]) > CUSTIN_MAX_JUMP)
+    if swapped:
       self.hist.clear()
     self.hist.append((t, d_rel, v_abs))
+    return swapped
 
   def solve(self, v_ego):
     """-> (dRel, vRel) or None, with vRel taken from the radar rather than from the range.
@@ -177,7 +181,16 @@ class RadarInterface(RadarInterfaceBase):
         keep = (rng > CUSTIN_MIN_RANGE and msg['SCORE'] >= CUSTIN_MIN_SCORE
                 and (addr == self.addrs[0] or abs(y_rel) < CUSTIN_MAX_ABS_Y))
         if keep:
-          slot.update(self.frame_time, x_rel, msg['V_ABS'])
+          # 0x238 is whichever target the stock ACC has chosen, not a fixed slot, so it
+          # changes car without saying so. This was already noticed here - the range history
+          # is thrown away on a jump - but the track id carried on regardless, so radard saw
+          # one car teleporting: behind two motorcycles on 2026-09-02 the lead moved 9.0 ->
+          # 5.5 m in a frame with REL_SPEED reading 0.8 km/h, while a second track sat at
+          # 5.6 m. Everything downstream builds on that id - the Kalman filter's speed, the
+          # preferred-track match, the MPC's obstacle - so say when it is a different object.
+          if slot.update(self.frame_time, x_rel, msg['V_ABS']):
+            self.pts[addr].trackId = self.track_id
+            self.track_id += 1
           self.hits[addr] = min(self.hits[addr] + 1, CUSTIN_MIN_HITS)
         else:
           slot.reset()
