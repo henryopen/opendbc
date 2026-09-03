@@ -29,6 +29,13 @@ CUSTIN_RADAR_ADDRS = tuple(range(CUSTIN_RADAR_START_ADDR,
                                 CUSTIN_RADAR_STRIDE))
 CUSTIN_PRIMARY_ONLY = True  # see the comment in _update
 CUSTIN_MIN_RANGE = 2.0      # below this is bumper clutter, and an empty slot reads zero
+# except on the stock ACC's own pick, which carries neither. Over 2026-09-03 the primary
+# slot read under two metres on 507 frames: 506 of them below 3 km/h, every one of those
+# dead ahead within 0.2 m of centre with the score saturated, and exactly one at road speed
+# - that one 2.5 m off to the side. It is the car we are stopped behind. Throwing it away
+# left only vision, whose range on a stationary car at four metres swung between 3.3 and
+# 14.8 m as motorcycles went past, and the planner crept at a gap that was not there.
+CUSTIN_PRIMARY_MIN_RANGE = 0.5
 CUSTIN_MAX_ABS_Y = 5.5      # this lane and the two beside it; roadside structure sits outside
 CUSTIN_WINDOW = 12          # ~0.36 s of history at 33 Hz
 CUSTIN_MIN_SAMPLES = 6
@@ -178,8 +185,10 @@ class RadarInterface(RadarInterfaceBase):
         # STATE does not tell targets from scenery here, and a guardrail read along its
         # length looks like a car at our own speed, so gate on range and lateral offset.
         # the primary target is the car's own pick, so it is not second-guessed on offset
-        keep = (rng > CUSTIN_MIN_RANGE and msg['SCORE'] >= CUSTIN_MIN_SCORE
-                and (addr == self.addrs[0] or abs(y_rel) < CUSTIN_MAX_ABS_Y))
+        primary = addr == self.addrs[0]
+        floor = CUSTIN_PRIMARY_MIN_RANGE if primary else CUSTIN_MIN_RANGE
+        keep = (rng > floor and msg['SCORE'] >= CUSTIN_MIN_SCORE
+                and (primary or abs(y_rel) < CUSTIN_MAX_ABS_Y))
         if keep:
           # 0x238 is whichever target the stock ACC has chosen, not a fixed slot, so it
           # changes car without saying so. This was already noticed here - the range history
