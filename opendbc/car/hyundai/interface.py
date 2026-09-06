@@ -146,9 +146,12 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.KIA_OPTIMA_G4_FL:
       ret.steerActuatorDelay = 0.2
 
-    # lagd settles around 0.33 on this car, so start there instead of waiting for it to learn
+    # Measured on this car rather than guessed: 443 segments of driving put the delay from
+    # command to yaw at 0.83 s (0.79/0.86 quartiles), of which 0.67 s is command to steering
+    # wheel. lagd adds 0.2 to whatever it starts from, so 0.63 lands the initial estimate on
+    # what the car actually does. It never gets to correct that itself - see MIN_VEGO in lagd.
     if candidate == CAR.HYUNDAI_CUSTIN_1ST_GEN:
-      ret.steerActuatorDelay = 0.33
+      ret.steerActuatorDelay = 0.63
 
     # Dashcam cars are missing a test route, or otherwise need validation
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
