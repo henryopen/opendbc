@@ -23,6 +23,23 @@ MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 # naturally on brake press. We send ~100 ms later if it fails to do so, or if we want to cancel for another reason.
 CANCEL_BUTTON_DELAY_FRAMES = 10
 
+# The driver torque limit below only pulls us back when the driver is pushing the *other* way.
+# Push the same way and the allowance opens up past STEER_MAX, so nothing is holding the two
+# apart and the MDPS drops out with ToiUnavail - measured on the Custin, twice in 7.2 hours,
+# both at low speed with a big angle and our torque pinned at 384 while the driver helped.
+# Backing off while the driver is already turning costs nothing (they are supplying the
+# torque) and takes the time spent above a 500 count sum from 19.3 s to 0.3 s. Hands off the
+# wheel this changes nothing at all.
+DRIVER_ASSIST_YIELD = 1.0
+DRIVER_ASSIST_MIN_TORQUE = 120
+
+# Unwinding out of a turn means building torque the other way, and building is what the slow
+# limit governs, so the wheel comes back at 3 counts a frame while the turn itself was
+# entered at the same rate on top of an already loaded rack. Faults all happen while
+# building *into* a turn at full lock, and unwind torque measures p99 246, so raising only
+# this side buys the unwind without touching the fault case: +0.5% time at full lock.
+UNWIND_STEER_DELTA_UP = 5
+
 
 def process_hud_alert(enabled, fingerprint, hud_control):
   sys_warning = (hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw))
@@ -59,6 +76,10 @@ class CarController(CarControllerBase):
     self.accel_last = 0
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
+    # only this car has the measurements behind the two changes below
+    self.tuned_lateral = CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN
+    self.unwind_params = CarControllerParams(CP)
+    self.unwind_params.STEER_DELTA_UP = UNWIND_STEER_DELTA_UP
     self.last_button_frame = 0
     self.cancel_counter = 0
 
@@ -68,7 +89,17 @@ class CarController(CarControllerBase):
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
-    apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
+    limits = self.params
+    if self.tuned_lateral:
+      driver_torque = CS.out.steeringTorque
+      if new_torque * driver_torque > 0 and abs(driver_torque) > self.params.STEER_DRIVER_ALLOWANCE:
+        yield_to_driver = DRIVER_ASSIST_YIELD * (abs(driver_torque) - self.params.STEER_DRIVER_ALLOWANCE)
+        cap = max(self.params.STEER_MAX - yield_to_driver, DRIVER_ASSIST_MIN_TORQUE)
+        new_torque = int(round(np.clip(new_torque, -cap, cap)))
+      # building torque the other way from where we are is the unwind, not a bigger turn
+      if new_torque * self.apply_torque_last <= 0:
+        limits = self.unwind_params
+    apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, limits)
 
     # >90 degree steering fault prevention
     self.angle_limit_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringAngleDeg) >= MAX_ANGLE, CC.latActive,
