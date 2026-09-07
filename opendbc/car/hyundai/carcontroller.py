@@ -33,12 +33,21 @@ CANCEL_BUTTON_DELAY_FRAMES = 10
 DRIVER_ASSIST_YIELD = 1.0
 DRIVER_ASSIST_MIN_TORQUE = 120
 
-# Unwinding out of a turn means building torque the other way, and building is what the slow
-# limit governs, so the wheel comes back at 3 counts a frame while the turn itself was
-# entered at the same rate on top of an already loaded rack. Faults all happen while
-# building *into* a turn at full lock, and unwind torque measures p99 246, so raising only
-# this side buys the unwind without touching the fault case: +0.5% time at full lock.
-UNWIND_STEER_DELTA_UP = 5
+# A faster limit for unwinding out of a turn was carried here from 2026-09-06 to 09-07 and
+# is gone because its premise was wrong. It read "unwinding means building torque the other
+# way", so it applied when the new torque opposed the last one. Coming out of a turn does
+# not do that: the torque falls from large to small with the same sign, which is governed by
+# STEER_DELTA_DOWN (7) and never touches STEER_DELTA_UP at all. Over the drive that carried
+# it, all 269 sign reversals while engaged had a previous torque under 20 counts out of 384
+# - a threshold of 20 leaves exactly none - at a median 49.6 km/h and 4.4 degrees of wheel.
+# They are not turns being unwound, they are the torque crossing zero while running straight,
+# which is what it does all the time. So the rule never once did what it was written for,
+# and meanwhile it handed the fastest ramp to the most common state on the road:
+# steerFaultTemporary went 0.10% -> 0.58% of frames, latActive 55% -> 7%, and between 30 and
+# 60 km/h lateral was available 10.7% of the time against 96.8% the day before.
+#
+# Anything aimed at how the wheel returns has to act on STEER_DELTA_DOWN or on the torque
+# request itself. Rate limits keyed on the sign of the torque will fire on straight roads.
 
 
 def process_hud_alert(enabled, fingerprint, hud_control):
@@ -78,8 +87,6 @@ class CarController(CarControllerBase):
     self.car_fingerprint = CP.carFingerprint
     # only this car has the measurements behind the two changes below
     self.tuned_lateral = CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN
-    self.unwind_params = CarControllerParams(CP)
-    self.unwind_params.STEER_DELTA_UP = UNWIND_STEER_DELTA_UP
     self.last_button_frame = 0
     self.cancel_counter = 0
 
@@ -96,16 +103,6 @@ class CarController(CarControllerBase):
         yield_to_driver = DRIVER_ASSIST_YIELD * (abs(driver_torque) - self.params.STEER_DRIVER_ALLOWANCE)
         cap = max(self.params.STEER_MAX - yield_to_driver, DRIVER_ASSIST_MIN_TORQUE)
         new_torque = int(round(np.clip(new_torque, -cap, cap)))
-      # building torque the other way from where we are is the unwind, not a bigger turn.
-      # This was <= 0 until 2026-09-07, which also caught apply_torque_last == 0 - that is
-      # not an unwind, it is torque being built from nothing, which is exactly the case the
-      # slow limit exists for. On the first drive carrying it, 75% of the frames taking the
-      # faster limit were that zero case, and 85% of the frames where the MDPS reported
-      # steerFaultTemporary were taking it: faults went from 0.10% of frames to 0.58% and
-      # latActive from 55% to 7%, with 78% of the dropouts landing on a fault. The +0.5%
-      # estimate in the note above only ever counted true reversals.
-      if new_torque * self.apply_torque_last < 0:
-        limits = self.unwind_params
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, limits)
 
     # >90 degree steering fault prevention
