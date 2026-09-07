@@ -96,8 +96,15 @@ class CarController(CarControllerBase):
         yield_to_driver = DRIVER_ASSIST_YIELD * (abs(driver_torque) - self.params.STEER_DRIVER_ALLOWANCE)
         cap = max(self.params.STEER_MAX - yield_to_driver, DRIVER_ASSIST_MIN_TORQUE)
         new_torque = int(round(np.clip(new_torque, -cap, cap)))
-      # building torque the other way from where we are is the unwind, not a bigger turn
-      if new_torque * self.apply_torque_last <= 0:
+      # building torque the other way from where we are is the unwind, not a bigger turn.
+      # This was <= 0 until 2026-09-07, which also caught apply_torque_last == 0 - that is
+      # not an unwind, it is torque being built from nothing, which is exactly the case the
+      # slow limit exists for. On the first drive carrying it, 75% of the frames taking the
+      # faster limit were that zero case, and 85% of the frames where the MDPS reported
+      # steerFaultTemporary were taking it: faults went from 0.10% of frames to 0.58% and
+      # latActive from 55% to 7%, with 78% of the dropouts landing on a fault. The +0.5%
+      # estimate in the note above only ever counted true reversals.
+      if new_torque * self.apply_torque_last < 0:
         limits = self.unwind_params
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, limits)
 
