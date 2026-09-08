@@ -146,12 +146,20 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.KIA_OPTIMA_G4_FL:
       ret.steerActuatorDelay = 0.2
 
-    # Measured on this car rather than guessed: 443 segments of driving put the delay from
-    # command to yaw at 0.83 s (0.79/0.86 quartiles), of which 0.67 s is command to steering
-    # wheel. lagd adds 0.2 to whatever it starts from, so 0.63 lands the initial estimate on
-    # what the car actually does. It never gets to correct that itself - see MIN_VEGO in lagd.
+    # lagd adds 0.2 to this and lagd never estimates on this car (MIN_VEGO is 15 m/s and
+    # nothing here holds 54 km/h for 25 s), so lat_delay ends up as this + 0.2 for the whole
+    # drive. 0.63 was tried on 2026-09-08 because 443 segments measured 0.83 s from command
+    # to yaw -- but that measurement is of a loop that was already compensating 0.53, and
+    # feeding it back in just made the car slower again: replaying both drives, the lag from
+    # the model's request to the car's actual lateral accel came out at lat_delay + 0.05 in
+    # each case (0.53 -> 0.59, 0.83 -> 0.88). lat_delay does not cancel a delay here, it sets
+    # how far behind the request the car is asked to stay. At 0.83 the error the PID sees
+    # pointed the way the car actually needed to go only 40% of the time at 45-60 km/h
+    # (72% at 0.53), and the wheel's high-frequency content at 10-20 km/h nearly doubled
+    # (7.1 -> 13.6 deg rms) - the ping-pong the driver reported. Back to the value that
+    # drove 294k frames with zero steering faults.
     if candidate == CAR.HYUNDAI_CUSTIN_1ST_GEN:
-      ret.steerActuatorDelay = 0.63
+      ret.steerActuatorDelay = 0.33
 
     # Dashcam cars are missing a test route, or otherwise need validation
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
