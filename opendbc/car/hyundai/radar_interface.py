@@ -41,6 +41,8 @@ CUSTIN_WINDOW = 12          # ~0.36 s of history at 33 Hz
 CUSTIN_MIN_SAMPLES = 6
 CUSTIN_MAX_GAP = 0.2        # seconds without an update before a slot is considered reused
 CUSTIN_MIN_SCORE = 30       # the radar's own tracking score, 31 is saturated
+CUSTIN_LANE_SCORE = 20      # a low score in our own lane is still a car, see _update
+CUSTIN_LANE_HALF_WIDTH = 1.5  # metres, where a car we are following actually sits
 CUSTIN_MIN_HITS = 8         # consecutive good frames before a track is handed over
 CUSTIN_MAX_JUMP = 3.0       # metres of range jump that means a different object took the slot
 
@@ -187,7 +189,24 @@ class RadarInterface(RadarInterfaceBase):
         # the primary target is the car's own pick, so it is not second-guessed on offset
         primary = addr == self.addrs[0]
         floor = CUSTIN_PRIMARY_MIN_RANGE if primary else CUSTIN_MIN_RANGE
-        keep = (rng > floor and msg['SCORE'] >= CUSTIN_MIN_SCORE
+        # SCORE is not a measure of how good a reading is. Measured against everything
+        # else on the target over 23592 frames (2026-09-11), it tracks lateral offset and
+        # track age instead: a saturated 31 sits 0.47 m off centre and has been held for
+        # 234 frames, while 1-19 sits at 5.77 m and is seven frames old. Among targets
+        # 20-45 m out and within 1.5 m of centre, a below-gate score is no less steady
+        # frame to frame than a saturated one (0.100 vs 0.200 m). The gate was never
+        # swept - it arrived in 1c477271 as "31 saturates on a settled track" - and it
+        # throws away the car straight ahead: on 2026-09-11 13:42 SCORE dithered 28-31
+        # while the radar read 39-43 m continuously, and the 30 floor blinded the planner
+        # for 2.2 s as the lead braked from 40 to 16 km/h. Do not simply lower the floor:
+        # 51.5% of the frames it rejects sit more than 2 m off centre (against 23.3% of
+        # those it accepts), which is the guardrail and next-lane traffic 1c477271 was
+        # written to keep out. Lateral offset is the radar's own steady reading (0.045 m
+        # of jitter), so let that, not SCORE, decide what counts as ours.
+        in_lane = abs(y_rel) < CUSTIN_LANE_HALF_WIDTH
+        score_ok = (msg['SCORE'] >= CUSTIN_MIN_SCORE
+                    or (in_lane and msg['SCORE'] >= CUSTIN_LANE_SCORE))
+        keep = (rng > floor and score_ok
                 and (primary or abs(y_rel) < CUSTIN_MAX_ABS_Y))
         if keep:
           # 0x238 is whichever target the stock ACC has chosen, not a fixed slot, so it
