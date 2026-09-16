@@ -3,11 +3,19 @@
 #include "opendbc/safety/declarations.h"
 #include "opendbc/safety/modes/hyundai_common.h"
 
+/* max_rt_delta was 112 for every Hyundai, which is rate_up 3 * 100 Hz * 0.25 s * 1.5 of
+   safety pad - the same arithmetic opendbc spells out for other brands. It was a constant
+   only because rate_up was. Derive it instead, so the two cannot drift apart: the cars on
+   ALT_LIMITS keep 75 for their rate_up of 2, and raising rate_up raises the real-time
+   ceiling with it rather than leaving the rate limit to be clipped by a number that was
+   computed for a different one. */
+#define HYUNDAI_RT_DELTA(rate_up) ((rate_up) * 375 / 10)   /* rate_up * 100 Hz * 0.25 s * 1.5 */
+
 #define HYUNDAI_LIMITS(steer, rate_up, rate_down) { \
   .max_torque = (steer), \
   .max_rate_up = (rate_up), \
   .max_rate_down = (rate_down), \
-  .max_rt_delta = 112, \
+  .max_rt_delta = HYUNDAI_RT_DELTA(rate_up), \
   .driver_torque_allowance = 50, \
   .driver_torque_multiplier = 2, \
   .type = TorqueDriverLimited, \
@@ -177,7 +185,7 @@ static void hyundai_rx_hook(const CANPacket_t *msg) {
 }
 
 static bool hyundai_tx_hook(const CANPacket_t *msg) {
-  const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(384, 3, 7);
+  const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(384, 7, 7);
   const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS_ALT = HYUNDAI_LIMITS(270, 2, 3);
   const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS_ALT_2 = HYUNDAI_LIMITS(170, 2, 3);
 
