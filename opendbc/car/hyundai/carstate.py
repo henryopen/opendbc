@@ -119,6 +119,17 @@ class CarState(CarStateBase):
     # while driving, and smoothing belongs with whoever displays it.
     if self.CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN:
       ret.fuelGauge = float(cp.vl["CLU15"]["CF_Clu_FuelLevel"]) / FUEL_TANK_CAPACITY
+      # The odometer and the trip computer's economy, for working out fuel used by
+      # subtraction rather than by watching the float. CF_Clu_Odometer is absolute and
+      # matched integrated wheel speed to 0.03 km over 31 routes.
+      #
+      # CF_Clu_AvgFCI is km/L, not L/100km. Read as L/100km it under-reports by 18%:
+      # across the tank between the 09-02 and 09-16 fills the car covered 436.2 km on
+      # 47.763 L, which is 10.95 L/100km against the 9.3 it was reporting - but 9.3 km/L
+      # is 10.75 L/100km, 1.8% out. The other readings agree: 4.7 right after a fill is
+      # 21 L/100km, which is what a cold start does, and 13.9 on a clear road is 7.2.
+      ret.odometer = float(cp.vl["CLU12"]["CF_Clu_Odometer"])
+      ret.avgFuelEconomy = float(cp.vl["CLU13"]["CF_Clu_AvgFCI"])
 
     self.cluster_speed_counter += 1
     if self.cluster_speed_counter > CLUSTER_SAMPLE_RATE:
