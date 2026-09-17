@@ -1048,6 +1048,7 @@ BO_ 1322 CLU15: 8 CLU
  SG_ CF_Clu_LanguageInfo : 33|5@1+ (1.0,0.0) [0.0|31.0] ""  BCM,PGS
  SG_ CF_Clu_ClusterSound : 38|1@1- (1.0,0.0) [0.0|0.0] ""  BCM,CGW,FATC
  SG_ CF_Clu_VehicleSpeed2 : 48|8@1+ (1,0) [0|255] "" XXX
+ SG_ CF_Clu_FuelLevel : 56|8@1+ (0.25,0) [0|63.75] "L" XXX
 
 BO_ 1066 _4WD13: 6 _4WD
  SG_ _4WD_CURRENT : 0|8@1+ (0.390625,0.0) [-50.0|50.0] "A"  TCU

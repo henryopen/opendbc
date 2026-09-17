@@ -14,6 +14,9 @@ ButtonType = structs.CarState.ButtonEvent.Type
 PREV_BUTTON_SAMPLES = 8
 CLUSTER_SAMPLE_RATE = 20  # frames
 STANDSTILL_THRESHOLD = 12 * 0.03125
+# Custin tank, read off the refuelling: CF_Clu_FuelLevel pins at 200 counts (50.0 L) once
+# full and stays there, so that is the top of the range rather than a figure from a brochure
+FUEL_TANK_CAPACITY = 50.0  # L
 
 # Cancel button can sometimes be ACC pause/resume button, main button can also enable on some cars
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
@@ -94,6 +97,20 @@ class CarState(CarStateBase):
       cp.vl["WHL_SPD11"]["WHL_SPD_RR"],
     )
     ret.standstill = cp.vl["WHL_SPD11"]["WHL_SPD_FL"] <= STANDSTILL_THRESHOLD and cp.vl["WHL_SPD11"]["WHL_SPD_RR"] <= STANDSTILL_THRESHOLD
+
+    # Fuel, from the unused last byte of CLU15. Identified on 2026-09-16 by refuelling with
+    # the engine running: the byte sat at 12 for the whole 49 km before the stop, climbed
+    # 10 -> 200 over the minute the pump ran, and has not moved since. 190 counts at the
+    # 0.25 L/count the DBC entry gives is 47.50 L against the 47.763 L on the receipt, and
+    # 200 counts is the 50 L tank - it stays pinned there for the 14.7 km after the fill.
+    #
+    # Only read on the Custin. CLU15's last byte is not in the DBC for any Hyundai and
+    # there is nothing to say another platform puts the same thing there.
+    #
+    # Raw, with no filtering: the float in the tank moves the reading +/- 2 counts (0.5 L)
+    # while driving, and smoothing belongs with whoever displays it.
+    if self.CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN:
+      ret.fuelGauge = float(cp.vl["CLU15"]["CF_Clu_FuelLevel"]) / FUEL_TANK_CAPACITY
 
     self.cluster_speed_counter += 1
     if self.cluster_speed_counter > CLUSTER_SAMPLE_RATE:
