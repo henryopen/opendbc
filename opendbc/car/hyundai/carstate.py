@@ -14,9 +14,9 @@ ButtonType = structs.CarState.ButtonEvent.Type
 PREV_BUTTON_SAMPLES = 8
 CLUSTER_SAMPLE_RATE = 20  # frames
 STANDSTILL_THRESHOLD = 12 * 0.03125
-# Custin tank, read off the refuelling: CF_Clu_FuelLevel pins at 200 counts (50.0 L) once
-# full and stays there, so that is the top of the range rather than a figure from a brochure
-FUEL_TANK_CAPACITY = 50.0  # L
+# Custin tank, 58 L from the spec, confirmed by two fills. The DBC entry carries the scale
+# and the offset; this is only the full mark, so the gauge can be published as a fraction.
+FUEL_TANK_CAPACITY = 58.0  # L
 
 # Cancel button can sometimes be ACC pause/resume button, main button can also enable on some cars
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
@@ -100,9 +100,17 @@ class CarState(CarStateBase):
 
     # Fuel, from the unused last byte of CLU15. Identified on 2026-09-16 by refuelling with
     # the engine running: the byte sat at 12 for the whole 49 km before the stop, climbed
-    # 10 -> 200 over the minute the pump ran, and has not moved since. 190 counts at the
-    # 0.25 L/count the DBC entry gives is 47.50 L against the 47.763 L on the receipt, and
-    # 200 counts is the 50 L tank - it stays pinned there for the 14.7 km after the fill.
+    # 10 -> 200 over the minute the pump ran, and has not moved since.
+    #
+    # The scale and offset in the DBC come from two fills against the 58 L tank:
+    #
+    #   09-16  before 10 counts, 47.763 L added to full  ->  before = 58 - 47.763 = 10.24 L
+    #   09-02  before 56 counts, 36.582 L added to full  ->  before = 58 - 36.582 = 21.42 L
+    #
+    # Two points, 190 counts apart in the first and 46 in the second, both give
+    # 0.2514 L/count, and 200 counts then lands on 58.0 L exactly. The offset is real: the
+    # float does not see the bottom 7.72 L, so reading the byte as litres directly - which
+    # is what the first version of this did - under-reports by 7.7 L when it matters most.
     #
     # Only read on the Custin. CLU15's last byte is not in the DBC for any Hyundai and
     # there is nothing to say another platform puts the same thing there.
