@@ -231,8 +231,8 @@ struct CarState {
 
   # The cluster's own odometer and trip-computer economy. Both are what the dash is
   # working from, so anything derived from them agrees with what the driver reads there.
-  odometer @60 :Float32;        # km, absolute
-  avgFuelEconomy @61 :Float32;  # km/L, averaged since the cluster last saw a refuelling
+  odometer @62 :Float32;        # km, absolute
+  avgFuelEconomy @63 :Float32;  # km/L, averaged since the cluster last saw a refuelling
 
   struct WheelSpeeds {
     # optional wheel speeds
