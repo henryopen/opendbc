@@ -16,7 +16,11 @@
   .max_rate_up = (rate_up), \
   .max_rate_down = (rate_down), \
   .max_rt_delta = HYUNDAI_RT_DELTA(rate_up), \
-  .driver_torque_allowance = 50, \
+  /* 200 rather than 50 for the Custin, see CarControllerParams: a hand resting on that */ \
+  /* wheel while it unwinds reads a median 186 of pure inertia, and at 50 the limit takes */ \
+  /* two thirds of what the controller asked for. This is the ceiling only - the car side */ \
+  /* sets 50 for every other HKG and never sends more, so nothing else changes. */ \
+  .driver_torque_allowance = 200, \
   .driver_torque_multiplier = 2, \
   .type = TorqueDriverLimited, \
    /* the EPS faults when the steering angle is above a certain threshold for too long. to prevent this, */ \

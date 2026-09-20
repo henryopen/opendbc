@@ -33,6 +33,36 @@ CANCEL_BUTTON_DELAY_FRAMES = 10
 DRIVER_ASSIST_YIELD = 1.0
 DRIVER_ASSIST_MIN_TORQUE = 120
 
+# Handing the wheel over rather than being trimmed down to a share of it. Measured on the
+# 09-20 drive: hands off, the controller gets 94% of what it asks for and the wheel unwinds
+# at 100 deg/s; with a hand on it, 67% and 80 deg/s, and the driver limit is what takes the
+# difference on 59.4% of those frames. The driver's torque does not separate intent from a
+# resting hand - pushing the wheel reads a median 141 and resisting it 100, and no threshold
+# splits them (at 200: 33% of pushes, 19% of rests) - so this does not try to read intent.
+# It draws a line instead: under STEER_DRIVER_ALLOWANCE we take the wheel and the limit no
+# longer trims us, over it we let go of it completely. What is gone is the middle, where we
+# held a third of the wheel and the driver held the rest and neither got what they wanted.
+# Held for half a second and released at a lower torque so a wobble across the line does not
+# chatter; the rate limit takes the torque to zero and back over ~0.15 s either way, so the
+# handover is not felt as a step.
+# 300 rather than the allowance itself. A hand simply resting on the wheel reaches 227 at
+# the 90th percentile and 305 at the 99th, so a line at the allowance (200) would be crossed
+# by the resting hand alone: replayed over the 09-20 drive it hands the wheel over for 22.9%
+# of the drive and 60.3% of every unwind, which is not assistance. Scanned against that:
+#
+#      threshold   handed over   of each unwind   of what we asked for, when held
+#         200         22.9%          60.3%                 100%
+#         250         10.9%          19.0%                  97%
+#         300          3.7%          10.4%                  99%
+#         400          0.5%           1.9%                  98%
+#
+# 300 sits just past where a resting hand reaches and inside where a deliberate push lives
+# (90th percentile 285), so it answers effort rather than contact, and the 99% says the band
+# between 200 and 300 costs almost nothing.
+DRIVER_HANDOVER_TORQUE = 300
+DRIVER_HANDOVER_FRAMES = 50      # 0.5 s at 100 Hz
+DRIVER_HANDOVER_RELEASE = 250    # hysteresis, so a wobble across the line does not chatter
+
 # A faster limit for unwinding out of a turn was carried here from 2026-09-06 to 09-07 and
 # is gone because its premise was wrong. It read "unwinding means building torque the other
 # way", so it applied when the new torque opposed the last one. Coming out of a turn does
@@ -87,6 +117,7 @@ class CarController(CarControllerBase):
     self.car_fingerprint = CP.carFingerprint
     # only this car has the measurements behind the two changes below
     self.tuned_lateral = CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN
+    self.handover_frames = 0
     self.last_button_frame = 0
     self.cancel_counter = 0
 
@@ -99,7 +130,16 @@ class CarController(CarControllerBase):
     limits = self.params
     if self.tuned_lateral:
       driver_torque = CS.out.steeringTorque
-      if new_torque * driver_torque > 0 and abs(driver_torque) > self.params.STEER_DRIVER_ALLOWANCE:
+      # Past the allowance, let go of the wheel instead of keeping hold of whatever the
+      # driver limit leaves us. Below it we now get everything we ask for, so this is where
+      # the two meet: there is no band left where both of us are pulling on the same wheel.
+      if abs(driver_torque) > DRIVER_HANDOVER_TORQUE:
+        self.handover_frames = DRIVER_HANDOVER_FRAMES
+      elif self.handover_frames > 0 and abs(driver_torque) < DRIVER_HANDOVER_RELEASE:
+        self.handover_frames -= 1
+      if self.handover_frames > 0:
+        new_torque = 0
+      elif new_torque * driver_torque > 0 and abs(driver_torque) > self.params.STEER_DRIVER_ALLOWANCE:
         yield_to_driver = DRIVER_ASSIST_YIELD * (abs(driver_torque) - self.params.STEER_DRIVER_ALLOWANCE)
         cap = max(self.params.STEER_MAX - yield_to_driver, DRIVER_ASSIST_MIN_TORQUE)
         new_torque = int(round(np.clip(new_torque, -cap, cap)))

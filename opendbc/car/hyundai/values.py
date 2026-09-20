@@ -54,6 +54,19 @@ class CarControllerParams:
     else:
       self.STEER_MAX = 384
 
+    # This car only. 50 is what a light rack reads when the driver means something by it; on
+    # this one a hand resting on the wheel while it unwinds reads a median 186, because the
+    # wheel is turning at 80-100 deg/s under it and the hand's own inertia shows up as torque
+    # against us. Measured over the 09-20 drive: with hands off we get 94% of what the
+    # controller asks for and the wheel unwinds at 100 deg/s, with a hand on it we get 67%
+    # and 80 deg/s, and opendbc's driver limit is what takes the difference on 59.4% of those
+    # frames. At 50 the limit lands at -384 + (-50 + 186)*2 = -112, a third of what was asked.
+    # At 200 the same 186 gives -412, which clips to -384: nothing taken. Above 200 the
+    # carcontroller hands the wheel over outright rather than fighting for what is left, so
+    # there is no band where both are pulling. The safety side carries the same number.
+    if CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN:
+      self.STEER_DRIVER_ALLOWANCE = 200
+
 
 class HyundaiSafetyFlags(IntFlag):
   EV_GAS = 1
