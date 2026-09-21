@@ -281,5 +281,63 @@ class TestHyundaiSafetyFCEVLong(TestHyundaiLongitudinalSafety, TestHyundaiSafety
     self.safety.init_tests()
 
 
+class TestHyundaiPedalHandover(TestHyundaiLongitudinalSafety):
+  """ALT_EXP_PEDAL_HANDOVER: the brake hands control over while moving and ends it stopped,
+  and the accelerator authorises from a standstill. Without these the car side can engage
+  while the panda stays shut, which is how this feature failed the first time it was written.
+  """
+  ALT_EXP_PEDAL_HANDOVER = 64
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_alternative_experience(self.ALT_EXP_PEDAL_HANDOVER)
+
+  def tearDown(self):
+    self.safety.set_alternative_experience(0)
+
+  def _stop(self):
+    for _ in range(10):
+      self._rx(self._speed_msg(0))
+
+  def _roll(self):
+    for _ in range(10):
+      self._rx(self._speed_msg(20))
+
+  def test_brake_while_moving_keeps_controls(self):
+    self._roll()
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_brake_msg(True))
+    self.assertTrue(self.safety.get_controls_allowed(), "brake while moving must not end control")
+    self._rx(self._user_brake_msg(False))
+    self.assertTrue(self.safety.get_controls_allowed(), "releasing it must leave control in place")
+
+  def test_brake_at_standstill_ends_controls(self):
+    self._stop()
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_brake_msg(True))
+    self.assertFalse(self.safety.get_controls_allowed(), "brake at a standstill is the way out")
+
+  def test_gas_at_standstill_authorises(self):
+    self._stop()
+    self.safety.set_controls_allowed(False)
+    self._rx(self._user_gas_msg(0))
+    self._rx(self._user_gas_msg(1))
+    self.assertTrue(self.safety.get_controls_allowed(), "a press at a standstill has to authorise")
+
+  def test_gas_while_moving_does_not_authorise(self):
+    self._roll()
+    self.safety.set_controls_allowed(False)
+    self._rx(self._user_gas_msg(0))
+    self._rx(self._user_gas_msg(1))
+    self.assertFalse(self.safety.get_controls_allowed(), "moving, the accelerator is an override")
+
+  def test_flag_off_restores_stock_behaviour(self):
+    self.safety.set_alternative_experience(0)
+    self._roll()
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_brake_msg(True))
+    self.assertFalse(self.safety.get_controls_allowed(), "without the flag the brake still ends it")
+
+
 if __name__ == "__main__":
   unittest.main()
