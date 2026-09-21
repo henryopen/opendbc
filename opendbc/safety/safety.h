@@ -350,10 +350,27 @@ static void relay_malfunction_set(void) {
 }
 
 static void generic_rx_checks(void) {
+  // A press of the accelerator at a standstill authorises. Nothing else can reach this state:
+  // the brake below has just taken the authorisation away and only the buttons give it back,
+  // which is the reach this flag exists to remove. Standstill only - while moving the
+  // accelerator is an override and must not hand authority to a car that does not have it.
+  // Ahead of gas_pressed_prev being updated, which is what makes this a rising edge at all.
+  if ((alternative_experience & ALT_EXP_PEDAL_HANDOVER) != 0) {
+    if (gas_pressed && !gas_pressed_prev && !vehicle_moving) {
+      controls_allowed = true;
+    }
+  }
   gas_pressed_prev = gas_pressed;
 
   // exit controls on rising edge of brake press
-  if (brake_pressed && (!brake_pressed_prev || vehicle_moving)) {
+  // With ALT_EXP_PEDAL_HANDOVER the brake only ends control once the car is stopped: while it
+  // is still rolling the pedal is an override, and the authorisation has to survive it or the
+  // car side has nothing to pick back up when the pedal is released.
+  bool brake_ends_control = brake_pressed && (!brake_pressed_prev || vehicle_moving);
+  if ((alternative_experience & ALT_EXP_PEDAL_HANDOVER) != 0) {
+    brake_ends_control = brake_pressed && !vehicle_moving;
+  }
+  if (brake_ends_control) {
     controls_allowed = false;
   }
   brake_pressed_prev = brake_pressed;

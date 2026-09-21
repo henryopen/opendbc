@@ -325,6 +325,18 @@ extern CurvatureSteeringState curvature_state;
 // is blocking engagement (main off, door open, gear, calibration, pedals).
 #define ALT_EXP_ALWAYS_ON_LATERAL 32
 
+// The pedals hand control over rather than ending it, so the driver does not have to press
+// RESUME to get back what a touch of the brake took away. Two halves of one behaviour:
+//   - braking while moving keeps the authorisation, so the car side can treat it as an
+//     override and pick control back up when the pedal comes off. Braking at a standstill
+//     still ends it, which is the driver's way of saying he is done.
+//   - a press of the accelerator at a standstill authorises, because nothing else can: the
+//     buttons are the only other path and the whole point is not to reach for them.
+// Both are needed together. Measured over 2026-09-16 to 09-20, the brake ended longitudinal
+// control 70 times and the driver pressed RESUME himself on 56 of them - the button was not
+// carrying a decision, it was asking him to say again what he had already decided.
+#define ALT_EXP_PEDAL_HANDOVER 64
+
 extern int alternative_experience;
 
 // time since safety mode has been changed
