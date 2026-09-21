@@ -287,7 +287,9 @@ class TestHyundaiPedalHandover(unittest.TestCase):
   Hyundai suite: inheriting it would re-run 46 cases that know nothing about this flag, and
   the framework's cross-class TX check reads two classes with the same TX list as a mistake.
   """
+  ALT_EXP_ALWAYS_ON_LATERAL = 32
   ALT_EXP_PEDAL_HANDOVER = 64
+  ALT_EXP = ALT_EXP_PEDAL_HANDOVER
 
   cnt_gas = 0
   cnt_speed = 0
@@ -298,7 +300,7 @@ class TestHyundaiPedalHandover(unittest.TestCase):
     self.safety = libsafety_py.libsafety
     self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.LONG)
     self.safety.init_tests()
-    self.safety.set_alternative_experience(self.ALT_EXP_PEDAL_HANDOVER)
+    self.safety.set_alternative_experience(self.ALT_EXP)
 
   def tearDown(self):
     self.safety.set_alternative_experience(0)
@@ -362,6 +364,16 @@ class TestHyundaiPedalHandover(unittest.TestCase):
     self.safety.set_controls_allowed(True)
     self._rx(self._user_brake_msg(True))
     self.assertFalse(self.safety.get_controls_allowed(), "without the flag the brake still ends it")
+
+
+class TestHyundaiPedalHandoverWithAlwaysOnLateral(TestHyundaiPedalHandover):
+  """The flag never travels alone on the car: AlwaysOnLateral is on, so card.py sends 32|64.
+  The two bits are read in different places - always-on lateral in lateral.h, the pedals in
+  generic_rx_checks - so they have no reason to interact, but nothing was running the pair
+  the car actually runs. This re-runs the whole set under it.
+  """
+  ALT_EXP = TestHyundaiPedalHandover.ALT_EXP_ALWAYS_ON_LATERAL | \
+            TestHyundaiPedalHandover.ALT_EXP_PEDAL_HANDOVER
 
 
 if __name__ == "__main__":
