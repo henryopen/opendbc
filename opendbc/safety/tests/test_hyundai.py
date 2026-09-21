@@ -281,30 +281,55 @@ class TestHyundaiSafetyFCEVLong(TestHyundaiLongitudinalSafety, TestHyundaiSafety
     self.safety.init_tests()
 
 
-class TestHyundaiPedalHandover(TestHyundaiLongitudinalSafety):
+class TestHyundaiPedalHandover(unittest.TestCase):
   """ALT_EXP_PEDAL_HANDOVER: the brake hands control over while moving and ends it stopped,
-  and the accelerator authorises from a standstill. Without these the car side can engage
-  while the panda stays shut, which is how this feature failed the first time it was written.
+  and the accelerator authorises from a standstill. Standalone rather than a subclass of the
+  Hyundai suite: inheriting it would re-run 46 cases that know nothing about this flag, and
+  the framework's cross-class TX check reads two classes with the same TX list as a mistake.
   """
   ALT_EXP_PEDAL_HANDOVER = 64
 
+  cnt_gas = 0
+  cnt_speed = 0
+  cnt_brake = 0
+
   def setUp(self):
-    super().setUp()
+    self.packer = CANPackerSafety("hyundai_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.LONG)
+    self.safety.init_tests()
     self.safety.set_alternative_experience(self.ALT_EXP_PEDAL_HANDOVER)
 
   def tearDown(self):
     self.safety.set_alternative_experience(0)
 
-  def _stop(self):
-    for _ in range(10):
-      self._rx(self._speed_msg(0))
+  def _rx(self, msg):
+    return self.safety.safety_rx_hook(msg)
 
-  def _roll(self):
+  def _speed_msg(self, speed):
+    values = {"WHL_SPD_%s" % s: speed * 0.03125 for s in ["FL", "FR", "RL", "RR"]}
+    values["WHL_SPD_AliveCounter_LSB"] = (self.__class__.cnt_speed % 16) & 0x3
+    values["WHL_SPD_AliveCounter_MSB"] = (self.__class__.cnt_speed % 16) >> 2
+    self.__class__.cnt_speed += 1
+    return self.packer.make_can_msg_safety("WHL_SPD11", 0, values, fix_checksum=checksum)
+
+  def _user_brake_msg(self, brake):
+    values = {"DriverOverride": 2 if brake else 1,
+              "AliveCounterTCS": self.__class__.cnt_brake % 8}
+    self.__class__.cnt_brake += 1
+    return self.packer.make_can_msg_safety("TCS13", 0, values, fix_checksum=checksum)
+
+  def _user_gas_msg(self, gas):
+    values = {"CF_Ems_AclAct": gas, "AliveCounter": self.__class__.cnt_gas % 4}
+    self.__class__.cnt_gas += 1
+    return self.packer.make_can_msg_safety("EMS16", 0, values, fix_checksum=checksum)
+
+  def _at_speed(self, speed):
     for _ in range(10):
-      self._rx(self._speed_msg(20))
+      self._rx(self._speed_msg(speed))
 
   def test_brake_while_moving_keeps_controls(self):
-    self._roll()
+    self._at_speed(20)
     self.safety.set_controls_allowed(True)
     self._rx(self._user_brake_msg(True))
     self.assertTrue(self.safety.get_controls_allowed(), "brake while moving must not end control")
@@ -312,20 +337,20 @@ class TestHyundaiPedalHandover(TestHyundaiLongitudinalSafety):
     self.assertTrue(self.safety.get_controls_allowed(), "releasing it must leave control in place")
 
   def test_brake_at_standstill_ends_controls(self):
-    self._stop()
+    self._at_speed(0)
     self.safety.set_controls_allowed(True)
     self._rx(self._user_brake_msg(True))
     self.assertFalse(self.safety.get_controls_allowed(), "brake at a standstill is the way out")
 
   def test_gas_at_standstill_authorises(self):
-    self._stop()
+    self._at_speed(0)
     self.safety.set_controls_allowed(False)
     self._rx(self._user_gas_msg(0))
     self._rx(self._user_gas_msg(1))
     self.assertTrue(self.safety.get_controls_allowed(), "a press at a standstill has to authorise")
 
   def test_gas_while_moving_does_not_authorise(self):
-    self._roll()
+    self._at_speed(20)
     self.safety.set_controls_allowed(False)
     self._rx(self._user_gas_msg(0))
     self._rx(self._user_gas_msg(1))
@@ -333,7 +358,7 @@ class TestHyundaiPedalHandover(TestHyundaiLongitudinalSafety):
 
   def test_flag_off_restores_stock_behaviour(self):
     self.safety.set_alternative_experience(0)
-    self._roll()
+    self._at_speed(20)
     self.safety.set_controls_allowed(True)
     self._rx(self._user_brake_msg(True))
     self.assertFalse(self.safety.get_controls_allowed(), "without the flag the brake still ends it")
