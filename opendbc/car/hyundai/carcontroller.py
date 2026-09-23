@@ -228,9 +228,19 @@ class CarController(CarControllerBase):
       # TODO: unclear if this is needed
       jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
       use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
+      # The brake hands the longitudinal over while moving (selfdrived holds it through the
+      # release) - and while it does, the ACC has to read as not acting, the way the stock ACC
+      # does. cruiseControl.override is set for the brake as well as the accelerator, so without
+      # this SCC12 said mode 2, "the driver is on the accelerator", and on 09-23 the car kept
+      # pulling with the brake down: 249 of 11977 braking frames in mode 2 were accelerating
+      # above +0.3 m/s^2 with aReqRaw at 0, against 2 of 24122 in mode 0. Ported from the
+      # sunnypilot version the driver drove on 08-25 (opendbc fe6cba27); the accelerator is
+      # untouched and stays in override mode.
+      brake_override = CC.enabled and not CC.longActive and not CS.out.gasPressed
       can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
                                                       hud_control, set_speed_in_units, stopping,
-                                                      CC.cruiseControl.override, use_fca, self.CP))
+                                                      CC.cruiseControl.override, use_fca, self.CP,
+                                                      brake_override))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
