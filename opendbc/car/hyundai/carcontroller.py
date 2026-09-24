@@ -71,14 +71,23 @@ DRIVER_ASSIST_MIN_TORQUE = 120
 #         400          5            1            1.9%
 #         450          1            0            0.1%
 #
-# 400 leaves the four where the driver was turning the same way as us. It gives up no way
-# out: against our torque the driver limit (allowance 200, multiplier 2, and panda checks it
-# too) already takes us to zero by a driver torque of 392, so the handover line only ever
-# mattered for the resting hand. Replayed open loop, the median torque sent through big turns
-# goes 92 -> 147 counts.
-DRIVER_HANDOVER_TORQUE = 400
+# So the line moves only for a driver torque against ours. With the driver it stays at 300,
+# and that half is the MDPS: pushing the same way is what drops it out with ToiUnavail (see
+# DRIVER_ASSIST_YIELD). Raising both to 400 was tried first and replayed over 09-23 + 09-24
+# (4 routes) it took the time with the two torques the same way and summing past 500 from
+# 3.2 s to 33.4 s, 20.7 s of it under 20 km/h where every fault on record has happened:
+#
+#      with / against   rate up   big-turn torque   same-way sum > 500
+#        300 / 300         7           105               3.2 s
+#        400 / 400        10           150              33.4 s
+#        300 / 400        10           135               5.3 s
+#
+# Against us nothing is given up: the driver limit (allowance 200, multiplier 2, checked by
+# panda too) already takes us to zero by a driver torque of 392.
+DRIVER_HANDOVER_TORQUE = 300          # driver turning the same way as us
+DRIVER_HANDOVER_TORQUE_OPPOSED = 400  # driver torque against ours: a hand the wheel is turning through
 DRIVER_HANDOVER_FRAMES = 50      # 0.5 s at 100 Hz
-DRIVER_HANDOVER_RELEASE = 350    # hysteresis, so a wobble across the line does not chatter
+DRIVER_HANDOVER_RELEASE = 250    # hysteresis, so a wobble across the line does not chatter
 
 # A faster limit for unwinding out of a turn was carried here from 2026-09-06 to 09-07 and
 # is gone because its premise was wrong. It read "unwinding means building torque the other
@@ -150,7 +159,8 @@ class CarController(CarControllerBase):
       # Past the allowance, let go of the wheel instead of keeping hold of whatever the
       # driver limit leaves us. Below it we now get everything we ask for, so this is where
       # the two meet: there is no band left where both of us are pulling on the same wheel.
-      if abs(driver_torque) > DRIVER_HANDOVER_TORQUE:
+      handover_at = DRIVER_HANDOVER_TORQUE_OPPOSED if new_torque * driver_torque < 0 else DRIVER_HANDOVER_TORQUE
+      if abs(driver_torque) > handover_at:
         self.handover_frames = DRIVER_HANDOVER_FRAMES
       elif self.handover_frames > 0 and abs(driver_torque) < DRIVER_HANDOVER_RELEASE:
         self.handover_frames -= 1
