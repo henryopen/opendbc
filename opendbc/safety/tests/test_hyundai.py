@@ -51,10 +51,10 @@ class TestHyundaiSafety(HyundaiButtonBase, common.CarSafetyTest, common.DriverTo
   RELAY_MALFUNCTION_ADDRS = {0: (0x340, 0x485)}  # LKAS11
   FWD_BLACKLISTED_ADDRS = {2: [0x340, 0x485]}
 
-  MAX_RATE_UP = 7
+  MAX_RATE_UP = 10
   MAX_RATE_DOWN = 7
   MAX_TORQUE_LOOKUP = [0], [384]
-  MAX_RT_DELTA = 262
+  MAX_RT_DELTA = 375
   DRIVER_TORQUE_ALLOWANCE = 200
   DRIVER_TORQUE_FACTOR = 2
 

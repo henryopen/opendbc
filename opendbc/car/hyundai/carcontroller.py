@@ -56,12 +56,29 @@ DRIVER_ASSIST_MIN_TORQUE = 120
 #         300          3.7%          10.4%                  99%
 #         400          0.5%           1.9%                  98%
 #
-# 300 sits just past where a resting hand reaches and inside where a deliberate push lives
-# (90th percentile 285), so it answers effort rather than contact, and the 99% says the band
-# between 200 and 300 costs almost nothing.
-DRIVER_HANDOVER_TORQUE = 300
+# 300 sat just past where a resting hand reaches on that drive - but those were hands on a
+# wheel mostly holding still. Turning in, the wheel is being driven through the hand, and the
+# hand pushes back harder. On the 09-24 drive (driver: "big turns just do not turn") the line
+# at 300 was crossed 37 times with the lateral active, 34 of them with the driver's torque
+# against ours, at a median 14 degrees and 19 km/h - the first moments of a turn - at a median
+# 305. Each one dropped our torque to zero for at least half a second, and 57% of every frame
+# in a big turn where we sent less than asked was this, ahead of the rate limit (29%).
+# Scanned on that drive:
+#
+#      threshold   triggers   against ours   handed over
+#         300         37           34           11.0%
+#         350         11            6            4.8%
+#         400          5            1            1.9%
+#         450          1            0            0.1%
+#
+# 400 leaves the four where the driver was turning the same way as us. It gives up no way
+# out: against our torque the driver limit (allowance 200, multiplier 2, and panda checks it
+# too) already takes us to zero by a driver torque of 392, so the handover line only ever
+# mattered for the resting hand. Replayed open loop, the median torque sent through big turns
+# goes 92 -> 147 counts.
+DRIVER_HANDOVER_TORQUE = 400
 DRIVER_HANDOVER_FRAMES = 50      # 0.5 s at 100 Hz
-DRIVER_HANDOVER_RELEASE = 250    # hysteresis, so a wobble across the line does not chatter
+DRIVER_HANDOVER_RELEASE = 350    # hysteresis, so a wobble across the line does not chatter
 
 # A faster limit for unwinding out of a turn was carried here from 2026-09-06 to 09-07 and
 # is gone because its premise was wrong. It read "unwinding means building torque the other
