@@ -56,36 +56,18 @@ DRIVER_ASSIST_MIN_TORQUE = 120
 #         300          3.7%          10.4%                  99%
 #         400          0.5%           1.9%                  98%
 #
-# 300 sat just past where a resting hand reaches on that drive - but those were hands on a
-# wheel mostly holding still. Turning in, the wheel is being driven through the hand, and the
-# hand pushes back harder. On the 09-24 drive (driver: "big turns just do not turn") the line
-# at 300 was crossed 37 times with the lateral active, 34 of them with the driver's torque
-# against ours, at a median 14 degrees and 19 km/h - the first moments of a turn - at a median
-# 305. Each one dropped our torque to zero for at least half a second, and 57% of every frame
-# in a big turn where we sent less than asked was this, ahead of the rate limit (29%).
-# Scanned on that drive:
-#
-#      threshold   triggers   against ours   handed over
-#         300         37           34           11.0%
-#         350         11            6            4.8%
-#         400          5            1            1.9%
-#         450          1            0            0.1%
-#
-# So the line moves only for a driver torque against ours. With the driver it stays at 300,
-# and that half is the MDPS: pushing the same way is what drops it out with ToiUnavail (see
-# DRIVER_ASSIST_YIELD). Raising both to 400 was tried first and replayed over 09-23 + 09-24
-# (4 routes) it took the time with the two torques the same way and summing past 500 from
-# 3.2 s to 33.4 s, 20.7 s of it under 20 km/h where every fault on record has happened:
-#
-#      with / against   rate up   big-turn torque   same-way sum > 500
-#        300 / 300         7           105               3.2 s
-#        400 / 400        10           150              33.4 s
-#        300 / 400        10           135               5.3 s
-#
-# Against us nothing is given up: the driver limit (allowance 200, multiplier 2, checked by
-# panda too) already takes us to zero by a driver torque of 392.
-DRIVER_HANDOVER_TORQUE = 300          # driver turning the same way as us
-DRIVER_HANDOVER_TORQUE_OPPOSED = 400  # driver torque against ours: a hand the wheel is turning through
+# 300 sits just past where a resting hand reaches and inside where a deliberate push lives
+# (90th percentile 285), so it answers effort rather than contact, and the 99% says the band
+# between 200 and 300 costs almost nothing.
+# 09-24: raised to 400 against our torque (d15e4cd2, 279d6c3a) on the reading that the driver
+# torque against ours at turn-in was a resting hand the wheel was turning through. It was not.
+# Of the 36 times the line was crossed that drive, the wheel was moving the driver's way in 25
+# and held still in 7, and in 32 of the 33 against us the controller was pushing exactly where
+# its own error said - the driver was correcting the path openpilot had chosen (too tight at
+# 93 and 97 degrees, unwinding early at 252). Handing the wheel over there is the point of
+# this line, so it is back at 300 both ways. Sign note: this fork returns -output_torque, so
+# torqueState's desired/actual lateral accel carry the opposite sign to actuators.torque.
+DRIVER_HANDOVER_TORQUE = 300
 DRIVER_HANDOVER_FRAMES = 50      # 0.5 s at 100 Hz
 DRIVER_HANDOVER_RELEASE = 250    # hysteresis, so a wobble across the line does not chatter
 
@@ -159,8 +141,7 @@ class CarController(CarControllerBase):
       # Past the allowance, let go of the wheel instead of keeping hold of whatever the
       # driver limit leaves us. Below it we now get everything we ask for, so this is where
       # the two meet: there is no band left where both of us are pulling on the same wheel.
-      handover_at = DRIVER_HANDOVER_TORQUE_OPPOSED if new_torque * driver_torque < 0 else DRIVER_HANDOVER_TORQUE
-      if abs(driver_torque) > handover_at:
+      if abs(driver_torque) > DRIVER_HANDOVER_TORQUE:
         self.handover_frames = DRIVER_HANDOVER_FRAMES
       elif self.handover_frames > 0 and abs(driver_torque) < DRIVER_HANDOVER_RELEASE:
         self.handover_frames -= 1
