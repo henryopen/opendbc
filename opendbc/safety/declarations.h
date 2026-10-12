@@ -337,6 +337,18 @@ extern CurvatureSteeringState curvature_state;
 // carrying a decision, it was asking him to say again what he had already decided.
 #define ALT_EXP_PEDAL_HANDOVER 64
 
+// Once the driver has authorised control on this drive (a wheel button, or the accelerator at a
+// standstill under ALT_EXP_PEDAL_HANDOVER), keep the authorisation until the panda leaves the safety
+// mode - i.e. until the ignition goes off. Neither the brake at a standstill nor the middle (pause)
+// button take it away; both still end openpilot's engagement on the car side, which is the
+// software's business. What this buys is that openpilot can be brought back without the wheel
+// buttons: the driver's keypad on the PiBar (selfdrive/keypad.py) cannot be seen by the panda, so
+// before this a stop at every red light meant reaching for RES again (driver, 2026-10-12: "no
+// ignition off, it should keep working - the less I touch the wheel the better"). The first
+// authorisation on each drive still has to be a physical one. This is what open251021 did, by
+// never letting the brake end control (2026-09-21 finding).
+#define ALT_EXP_KEEP_AUTHORISATION 128
+
 extern int alternative_experience;
 
 // time since safety mode has been changed

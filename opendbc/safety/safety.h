@@ -370,6 +370,10 @@ static void generic_rx_checks(void) {
   if ((alternative_experience & ALT_EXP_PEDAL_HANDOVER) != 0) {
     brake_ends_control = brake_pressed && !vehicle_moving;
   }
+  // and with ALT_EXP_KEEP_AUTHORISATION not even stopped: the authorisation lasts the drive
+  if ((alternative_experience & ALT_EXP_KEEP_AUTHORISATION) != 0) {
+    brake_ends_control = false;
+  }
   if (brake_ends_control) {
     controls_allowed = false;
   }

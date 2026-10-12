@@ -114,8 +114,9 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
     }
 
     // exit controls while cancel is held. releasing it is what hands authority back,
-    // and only when controls were already off when it went down
-    if (cruise_button == HYUNDAI_BTN_CANCEL) {
+    // and only when controls were already off when it went down. With ALT_EXP_KEEP_AUTHORISATION
+    // the pause is openpilot's alone and the authorisation stays (see declarations.h).
+    if ((cruise_button == HYUNDAI_BTN_CANCEL) && ((alternative_experience & ALT_EXP_KEEP_AUTHORISATION) == 0)) {
       controls_allowed = false;
     }
 

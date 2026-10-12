@@ -376,5 +376,72 @@ class TestHyundaiPedalHandoverWithAlwaysOnLateral(TestHyundaiPedalHandover):
             TestHyundaiPedalHandover.ALT_EXP_PEDAL_HANDOVER
 
 
+class TestHyundaiKeepAuthorisation(TestHyundaiPedalHandover):
+  """ALT_EXP_KEEP_AUTHORISATION on top of what the car runs (32|64): once authorised, neither the
+  brake at a standstill nor the middle button take it away; a new safety mode (ignition) does.
+  The pedal-handover cases are inherited and re-run under it, except the stop that is now
+  supposed to keep control."""
+  ALT_EXP_KEEP_AUTHORISATION = 128
+  ALT_EXP = TestHyundaiPedalHandover.ALT_EXP_ALWAYS_ON_LATERAL | TestHyundaiPedalHandover.ALT_EXP_PEDAL_HANDOVER | \
+            ALT_EXP_KEEP_AUTHORISATION
+  BTN_NONE, BTN_RESUME, BTN_SET, BTN_CANCEL = 0, 1, 2, 4
+  cnt_button = 0
+
+  def _button_msg(self, buttons):
+    values = {"CF_Clu_CruiseSwState": buttons, "CF_Clu_CruiseSwMain": 0, "CF_Clu_AliveCnt1": self.__class__.cnt_button % 16}
+    self.__class__.cnt_button += 1
+    return self.packer.make_can_msg_safety("CLU11", 0, values)
+
+  def _press(self, button):
+    self._rx(self._button_msg(button))
+    self._rx(self._button_msg(self.BTN_NONE))
+
+  def test_brake_at_standstill_ends_controls(self):
+    # inherited expectation does not hold under this flag - see test_brake_at_standstill_keeps_controls
+    pass
+
+  def test_brake_at_standstill_keeps_controls(self):
+    self._at_speed(0)
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_brake_msg(True))
+    self._rx(self._user_brake_msg(False))
+    self.assertTrue(self.safety.get_controls_allowed(), "a stop with the brake keeps the drive's authorisation")
+
+  def test_cancel_button_keeps_controls(self):
+    self._at_speed(15)
+    self.safety.set_controls_allowed(True)
+    self._rx(self._button_msg(self.BTN_CANCEL))
+    self.assertTrue(self.safety.get_controls_allowed(), "holding the middle button keeps it")
+    self._rx(self._button_msg(self.BTN_NONE))
+    self.assertTrue(self.safety.get_controls_allowed(), "and so does releasing it")
+
+  def test_first_authorisation_still_needs_a_button(self):
+    self._at_speed(15)
+    self.safety.set_controls_allowed(False)
+    self._rx(self._user_brake_msg(True))
+    self._rx(self._user_brake_msg(False))
+    self.assertFalse(self.safety.get_controls_allowed(), "nothing but the driver gives the first one")
+    self._press(self.BTN_RESUME)
+    self.assertTrue(self.safety.get_controls_allowed(), "RES gives it")
+
+  def test_middle_button_gives_the_first_authorisation(self):
+    self._at_speed(15)
+    self.safety.set_controls_allowed(False)
+    self._press(self.BTN_CANCEL)
+    self.assertTrue(self.safety.get_controls_allowed(), "a press while off still resumes")
+
+  def test_new_safety_mode_ends_it(self):
+    self.safety.set_controls_allowed(True)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.LONG)
+    self.assertFalse(self.safety.get_controls_allowed(), "the ignition cycle (a new safety mode) ends it")
+
+  def test_without_the_flag_the_middle_button_ends_it(self):
+    self.safety.set_alternative_experience(self.ALT_EXP_ALWAYS_ON_LATERAL | self.ALT_EXP_PEDAL_HANDOVER)
+    self._at_speed(15)
+    self.safety.set_controls_allowed(True)
+    self._rx(self._button_msg(self.BTN_CANCEL))
+    self.assertFalse(self.safety.get_controls_allowed(), "stock pause still ends it")
+
+
 if __name__ == "__main__":
   unittest.main()
