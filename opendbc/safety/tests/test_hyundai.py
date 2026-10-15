@@ -53,9 +53,9 @@ class TestHyundaiSafety(HyundaiButtonBase, common.CarSafetyTest, common.DriverTo
 
   MAX_RATE_UP = 7
   MAX_RATE_DOWN = 7
-  MAX_TORQUE_LOOKUP = [0], [384]
+  MAX_TORQUE_LOOKUP = [0], [450]
   MAX_RT_DELTA = 262
-  DRIVER_TORQUE_ALLOWANCE = 200
+  DRIVER_TORQUE_ALLOWANCE = 167
   DRIVER_TORQUE_FACTOR = 2
 
   # Safety around steering req bit

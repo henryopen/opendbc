@@ -67,6 +67,24 @@ class CarControllerParams:
     if CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN:
       self.STEER_DRIVER_ALLOWANCE = 200
 
+    # What one unit of actuators.torque is worth in CAN counts. The same as STEER_MAX everywhere
+    # except where the ceiling has been lifted without rescaling the controller below it.
+    self.STEER_TORQUE_SCALE = self.STEER_MAX
+
+    # Custin, 2026-10-15 (the driver's call, to try): ceiling 384 -> 450 with the scale left at
+    # 384, so everything the controller already asks for goes out exactly as before and only a
+    # request past the old ceiling gets more. Measured 10-08..10-14 with the controller alone on
+    # the wheel: at 90-180 degrees under 20 km/h it wanted more than 384 27% of the time; of 89
+    # big-corner takeovers, 9 were at 384 with the driver turning the same way and the wheel
+    # carrying on (not enough torque), 66 were the driver pulling it back. Never run above 384 on
+    # this car, so what the MDPS accepts is unknown - watch CF_Mdps_ToiUnavail.
+    # The allowance drops by the same 66/2 so the driver limit is unchanged against a driver
+    # pulling the other way: 450 + (167 + d) * 2 == 384 + (200 + d) * 2. The safety side carries
+    # the same pair; the same-direction sum is held in carcontroller (DRIVER_ASSIST_SUM_MAX).
+    if CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN:
+      self.STEER_MAX = 450
+      self.STEER_DRIVER_ALLOWANCE = 167
+
 
 class HyundaiSafetyFlags(IntFlag):
   EV_GAS = 1

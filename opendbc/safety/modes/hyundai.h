@@ -20,7 +20,9 @@
   /* wheel while it unwinds reads a median 186 of pure inertia, and at 50 the limit takes */ \
   /* two thirds of what the controller asked for. This is the ceiling only - the car side */ \
   /* sets 50 for every other HKG and never sends more, so nothing else changes. */ \
-  .driver_torque_allowance = 200, \
+  /* 2026-10-15: 167 with max_torque 450 (was 200 with 384) - the same limit against a */ \
+  /* driver pulling the other way, 450 + (167 + d) * 2 == 384 + (200 + d) * 2. */ \
+  .driver_torque_allowance = 167, \
   .driver_torque_multiplier = 2, \
   .type = TorqueDriverLimited, \
    /* the EPS faults when the steering angle is above a certain threshold for too long. to prevent this, */ \
@@ -189,7 +191,7 @@ static void hyundai_rx_hook(const CANPacket_t *msg) {
 }
 
 static bool hyundai_tx_hook(const CANPacket_t *msg) {
-  const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(384, 7, 7);
+  const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(450, 7, 7);  // 384 until 2026-10-15, see the Custin's CarControllerParams
   const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS_ALT = HYUNDAI_LIMITS(270, 2, 3);
   const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS_ALT_2 = HYUNDAI_LIMITS(170, 2, 3);
 

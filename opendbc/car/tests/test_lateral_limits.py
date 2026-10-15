@@ -50,8 +50,10 @@ class TestLateralLimits(unittest.TestCase):
     max_lat_accel = torque_params['MAX_LAT_ACCEL_MEASURED']
 
     # Steer up/down delta per 10ms frame, in percentage of max torque
-    steer_up_per_frame = control_params.STEER_DELTA_UP / control_params.STEER_MAX / steer_step
-    steer_down_per_frame = control_params.STEER_DELTA_DOWN / control_params.STEER_MAX / steer_step
+    # per unit of actuators.torque, which is STEER_TORQUE_SCALE counts where a car defines it
+    scale = getattr(control_params, "STEER_TORQUE_SCALE", control_params.STEER_MAX)
+    steer_up_per_frame = control_params.STEER_DELTA_UP / scale / steer_step
+    steer_down_per_frame = control_params.STEER_DELTA_DOWN / scale / steer_step
 
     # Lateral acceleration reached in 0.5 seconds, clipping to max torque
     accel_up_0_5_sec = min(steer_up_per_frame * JERK_MEAS_T / DT_CTRL, 1.0) * max_lat_accel

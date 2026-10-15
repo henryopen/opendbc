@@ -32,6 +32,11 @@ CANCEL_BUTTON_DELAY_FRAMES = 10
 # wheel this changes nothing at all.
 DRIVER_ASSIST_YIELD = 1.0
 DRIVER_ASSIST_MIN_TORQUE = 120
+# 2026-10-15: STEER_MAX went 384 -> 450 with the allowance 200 -> 167 (see values.py). The yield
+# above was "384 - (|driver| - 200)", a sum of ours and the driver's of at most 584, and that sum
+# is what the MDPS cares about. Held at 584 here rather than letting it rise with the ceiling:
+# same as before whenever the driver is turning with us, and the full 450 only hands off.
+DRIVER_ASSIST_SUM_MAX = 584
 
 # Handing the wheel over rather than being trimmed down to a share of it. Measured on the
 # 09-20 drive: hands off, the controller gets 94% of what it asks for and the wheel unwinds
@@ -134,7 +139,7 @@ class CarController(CarControllerBase):
     hud_control = CC.hudControl
 
     # steering torque
-    new_torque = int(round(actuators.torque * self.params.STEER_MAX))
+    new_torque = int(round(actuators.torque * self.params.STEER_TORQUE_SCALE))
     limits = self.params
     if self.tuned_lateral:
       driver_torque = CS.out.steeringTorque
@@ -147,9 +152,8 @@ class CarController(CarControllerBase):
         self.handover_frames -= 1
       if self.handover_frames > 0:
         new_torque = 0
-      elif new_torque * driver_torque > 0 and abs(driver_torque) > self.params.STEER_DRIVER_ALLOWANCE:
-        yield_to_driver = DRIVER_ASSIST_YIELD * (abs(driver_torque) - self.params.STEER_DRIVER_ALLOWANCE)
-        cap = max(self.params.STEER_MAX - yield_to_driver, DRIVER_ASSIST_MIN_TORQUE)
+      elif new_torque * driver_torque > 0:
+        cap = max(min(self.params.STEER_MAX, DRIVER_ASSIST_SUM_MAX - DRIVER_ASSIST_YIELD * abs(driver_torque)), DRIVER_ASSIST_MIN_TORQUE)
         new_torque = int(round(np.clip(new_torque, -cap, cap)))
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, limits)
 
@@ -201,7 +205,7 @@ class CarController(CarControllerBase):
                                             stopping, hud_control, actuators, CS, CC))
 
     new_actuators = actuators.as_builder()
-    new_actuators.torque = apply_torque / self.params.STEER_MAX
+    new_actuators.torque = apply_torque / self.params.STEER_TORQUE_SCALE
     new_actuators.torqueOutputCan = apply_torque
     new_actuators.accel = accel
 
