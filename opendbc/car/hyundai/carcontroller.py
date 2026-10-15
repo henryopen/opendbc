@@ -37,6 +37,11 @@ DRIVER_ASSIST_MIN_TORQUE = 120
 # is what the MDPS cares about. Held at 584 here rather than letting it rise with the ceiling:
 # same as before whenever the driver is turning with us, and the full 450 only hands off.
 DRIVER_ASSIST_SUM_MAX = 584
+# And against a driver the old 384 stays the ceiling: the driver limit alone would let a light
+# opposing hand (under the allowance) meet the full 450, 66 more than before - the extra is for
+# the wheel when nobody is on it. 50, because a hand-off wheel being driven through a corner
+# reads up to about +-40 of its own inertia (10-08..10-14 turn-ins), which must not count.
+DRIVER_AGAINST_MIN = 50
 
 # Handing the wheel over rather than being trimmed down to a share of it. Measured on the
 # 09-20 drive: hands off, the controller gets 94% of what it asks for and the wheel unwinds
@@ -154,6 +159,9 @@ class CarController(CarControllerBase):
         new_torque = 0
       elif new_torque * driver_torque > 0:
         cap = max(min(self.params.STEER_MAX, DRIVER_ASSIST_SUM_MAX - DRIVER_ASSIST_YIELD * abs(driver_torque)), DRIVER_ASSIST_MIN_TORQUE)
+        new_torque = int(round(np.clip(new_torque, -cap, cap)))
+      elif new_torque * driver_torque < 0 and abs(driver_torque) > DRIVER_AGAINST_MIN:
+        cap = self.params.STEER_TORQUE_SCALE
         new_torque = int(round(np.clip(new_torque, -cap, cap)))
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, limits)
 
