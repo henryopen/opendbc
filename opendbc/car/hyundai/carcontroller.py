@@ -32,13 +32,13 @@ CANCEL_BUTTON_DELAY_FRAMES = 10
 # wheel this changes nothing at all.
 DRIVER_ASSIST_YIELD = 1.0
 DRIVER_ASSIST_MIN_TORQUE = 120
-# 2026-10-15: STEER_MAX went 384 -> 450 with the allowance 200 -> 167 (see values.py). The yield
+# STEER_MAX went above 384 with a lower allowance (409 / 188 since 10-16, see values.py). The yield
 # above was "384 - (|driver| - 200)", a sum of ours and the driver's of at most 584, and that sum
 # is what the MDPS cares about. Held at 584 here rather than letting it rise with the ceiling:
-# same as before whenever the driver is turning with us, and the full 450 only hands off.
+# same as before whenever the driver is turning with us, and the full ceiling only hands off.
 DRIVER_ASSIST_SUM_MAX = 584
 # And against a driver the old 384 stays the ceiling: the driver limit alone would let a light
-# opposing hand (under the allowance) meet the full 450, 66 more than before - the extra is for
+# opposing hand (under the allowance) meet the full ceiling, more than before - the extra is for
 # the wheel when nobody is on it. 50, because a hand-off wheel being driven through a corner
 # reads up to about +-40 of its own inertia (10-08..10-14 turn-ins), which must not count.
 DRIVER_AGAINST_MIN = 50
