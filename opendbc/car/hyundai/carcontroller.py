@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, make_tester_present_msg, structs
@@ -10,6 +12,29 @@ from opendbc.car.interfaces import CarControllerBase
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+
+# How quickly the ESC may build braking - SCC14 JerkLowerLimit (2026-10-17). The driver: braking still feels
+# abrupt, not like the stock ACC. The stock ACC on this car (routes 00000001 / 00000006, its own SCC14 off the
+# bus) sends JerkLowerLimit 1.2 (0.5 at times) and JerkUpperLimit 1.0; openpilot sent 5.0. Matched against
+# it (following at 15-28 km/h, closing at 2-6 km/h) the request 0.5 s into braking was about the same,
+# 0.61 stock against 0.70, but the car was at -0.22 against -0.35: it is the car building the braking
+# faster, not the request. That end cannot be simulated, so this is tried on the road. Below the urgent
+# line the planner already deepens braking by at most BRAKE_ONSET_J (1.5 m/s^3), so 1.2 here is the stock
+# value the car was tuned for; anything urgent gets 5.0 at once and for LJ_HOLD after: a request under
+# LJ_URGENT_ACCEL, or braking deepening faster than LJ_URGENT_RATE (the planner skips its build-up for a lead
+# reached within 3 s, nearer than 0.7 of the follow distance, a committed stop or an FCW, and those come in
+# faster than that). Only the braking side is watched: the step from accelerating down to zero is not urgency.
+# Replayed over 10-14/10-16's commands (122 min): 51% of the time braking is at 1.2, 28% of brakings never
+# leave it; all 138 harder than -1.5 switch to 5.0, a median 0.38 s before the request reaches -1.0 (at 2.5
+# m/s^3 63% / 46%, but the switch only as the request reached -1.0).
+# Custin only - the stock numbers are this car's. /data/stock_jerk_off brings back 5.0 throughout.
+LJ_COMFORT = 1.2          # m/s^3, stock
+LJ_URGENT = 5.0           # m/s^3, what was always sent
+LJ_URGENT_ACCEL = -1.0    # m/s^2
+LJ_URGENT_RATE = 2.0      # m/s^3, braking deepening faster than this over LJ_WINDOW
+LJ_WINDOW = 5             # SCC frames (50 Hz) -> 0.1 s
+LJ_HOLD = 1.5             # s
+STOCK_JERK_OFF_FLAG = '/data/stock_jerk_off'
 
 # EPS faults if you apply torque while the steering angle is above 90 degrees for more than 1 second
 # All slightly below EPS thresholds to avoid fault
@@ -136,6 +161,10 @@ class CarController(CarControllerBase):
     # only this car has the measurements behind the two changes below
     self.tuned_lateral = CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN
     self.handover_frames = 0
+    self.stock_jerk = CP.carFingerprint == CAR.HYUNDAI_CUSTIN_1ST_GEN
+    self.brake_hist = []
+    self.jerk_urgent_frames = 0
+    self.jerk_flag_off = False
     self.last_button_frame = 0
     self.cancel_counter = 0
 
@@ -220,6 +249,23 @@ class CarController(CarControllerBase):
     self.frame += 1
     return new_actuators, can_sends
 
+  def lower_jerk(self, accel):
+    """SCC14 JerkLowerLimit for this SCC frame (50 Hz) - see LJ_* above."""
+    if self.frame % 100 == 0:
+      self.jerk_flag_off = os.path.exists(STOCK_JERK_OFF_FLAG)
+    h = self.brake_hist
+    h.append(min(accel, 0.))
+    if len(h) > LJ_WINDOW + 1:
+      h.pop(0)
+    rate = (h[0] - h[-1]) / ((len(h) - 1) * 2 * DT_CTRL) if len(h) > 1 else 0.
+    if accel < LJ_URGENT_ACCEL or rate > LJ_URGENT_RATE:
+      self.jerk_urgent_frames = int(LJ_HOLD / (2 * DT_CTRL))
+    elif self.jerk_urgent_frames > 0:
+      self.jerk_urgent_frames -= 1
+    if not self.stock_jerk or self.jerk_flag_off or self.jerk_urgent_frames > 0:
+      return LJ_URGENT
+    return LJ_COMFORT
+
   def create_can_msgs(self, apply_steer_req, apply_torque, torque_fault, set_speed_in_units, accel, stopping, hud_control, actuators, CS, CC):
     can_sends = []
 
@@ -260,7 +306,7 @@ class CarController(CarControllerBase):
       can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
                                                       hud_control, set_speed_in_units, stopping,
                                                       CC.cruiseControl.override, use_fca, self.CP,
-                                                      brake_override))
+                                                      brake_override, lower_jerk=self.lower_jerk(accel)))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
